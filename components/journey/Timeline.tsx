@@ -232,29 +232,29 @@ function CollapsibleSection({
         <View style={styles.sectionBadgeRow}>
           {section.milestones.length > 0 && (
             <View style={[styles.countBadge, { backgroundColor: '#F4A26122' }]}>
-              <Text style={[styles.countBadgeText, { color: '#F4A261' }]}>
-                ⭐ {section.milestones.length}
+              <Text style={[styles.countBadgeText, { color: '#F4A261' }]} numberOfLines={1}>
+                {`⭐ ${section.milestones.length}`}
               </Text>
             </View>
           )}
           {avgNappy > 0 && (
             <View style={[styles.countBadge, { backgroundColor: EventColors.nappy + '22' }]}>
-              <Text style={[styles.countBadgeText, { color: EventColors.nappy }]}>
-                🧷 {fmtAvg(avgNappy)}/day
+              <Text style={[styles.countBadgeText, { color: EventColors.nappy }]} numberOfLines={1}>
+                {`🧷 ${fmtAvg(avgNappy)}/\u2060day`}
               </Text>
             </View>
           )}
           {avgMl > 0 && (
             <View style={[styles.countBadge, { backgroundColor: EventColors.meal + '22' }]}>
-              <Text style={[styles.countBadgeText, { color: EventColors.meal }]}>
-                🍼 {Math.round(avgMl)}ml/day
+              <Text style={[styles.countBadgeText, { color: EventColors.meal }]} numberOfLines={1}>
+                {`🍼 ${Math.round(avgMl)}ml/\u2060day`}
               </Text>
             </View>
           )}
           {avgSleepH > 0 && (
             <View style={[styles.countBadge, { backgroundColor: EventColors.sleep + '22' }]}>
-              <Text style={[styles.countBadgeText, { color: EventColors.sleep }]}>
-                😴 {avgSleepH.toFixed(1)}h/day
+              <Text style={[styles.countBadgeText, { color: EventColors.sleep }]} numberOfLines={1}>
+                {`😴 ${avgSleepH.toFixed(1)}h/\u2060day`}
               </Text>
             </View>
           )}
@@ -911,10 +911,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
+    flexShrink: 0,
   },
   countBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+    flexShrink: 0,
   },
   sectionContent: {
     borderLeftWidth: 2,
