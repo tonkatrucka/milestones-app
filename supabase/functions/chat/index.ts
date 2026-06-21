@@ -22,7 +22,8 @@ interface IncomingMessage {
 }
 
 interface RequestBody {
-  messages: IncomingMessage[];
+  messages: IncomingMessage[];           // current batch — actionable, may trigger tools
+  contextMessages?: IncomingMessage[];   // prior history — read-only context, do not log
   child: { id: string; name: string; date_of_birth: string };
   currentDate: string;
 }
@@ -388,10 +389,12 @@ Deno.serve(async (req: Request) => {
     const adminDb = createClient(supabaseUrl, serviceRoleKey);
 
     const body: RequestBody = await req.json();
-    const { messages, child, currentDate } = body;
+    const { messages, contextMessages = [], child, currentDate } = body;
 
     // ── Intent parser: bypass Claude for simple activity messages ─────────────
-    // Only applies when the request has no photos attached
+    // Only applies to the current batch (messages), never to contextMessages.
+    // Supports multi-message batches: all user messages are checked and all
+    // matches are executed before returning a combined confirmation.
     const hasPhoto = messages.some(
       (m) =>
         Array.isArray(m.content) &&
@@ -399,31 +402,60 @@ Deno.serve(async (req: Request) => {
     );
 
     if (!hasPhoto) {
-      const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-      if (lastUserMsg && typeof lastUserMsg.content === 'string') {
-        const intent = parseIntent(lastUserMsg.content);
-        if (intent) {
-          const result = await handleTool(
-            intent.toolName,
-            intent.input,
-            child.id,
-            user?.id ?? null,
-            adminDb,
-            currentDate,
-          );
-          if (!result.startsWith('Error:')) {
-            return new Response(JSON.stringify({ content: `Done! ${result}` }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-            });
-          }
-          // On error, fall through to Claude
+      const batchUserMsgs = messages.filter(
+        (m) => m.role === 'user' && typeof m.content === 'string',
+      );
+      const confirmations: string[] = [];
+      let anyParseError = false;
+
+      for (const msg of batchUserMsgs) {
+        const intent = parseIntent(msg.content as string);
+        if (!intent) {
+          anyParseError = true; // unrecognised message — fall through to Claude
+          break;
         }
+        const result = await handleTool(
+          intent.toolName,
+          intent.input,
+          child.id,
+          user?.id ?? null,
+          adminDb,
+          currentDate,
+        );
+        if (result.startsWith('Error:')) {
+          anyParseError = true;
+          break;
+        }
+        confirmations.push(result);
       }
+
+      if (!anyParseError && confirmations.length > 0 && confirmations.length === batchUserMsgs.length) {
+        const reply = confirmations.length === 1
+          ? `Done! ${confirmations[0]}`
+          : `Done! ${confirmations.join(' ')}`;
+        return new Response(JSON.stringify({ content: reply }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        });
+      }
+      // If any message wasn't matched or errored, fall through to Claude
     }
 
     // ── Build system prompt ───────────────────────────────────────────────────
     const age = calculateAge(child.date_of_birth, currentDate);
+
+    // Build optional read-only context block from prior messages
+    let contextBlock = '';
+    if (contextMessages.length > 0) {
+      const lines = contextMessages.map((m) => {
+        const text = typeof m.content === 'string'
+          ? m.content
+          : (m.content as ContentBlock[]).find((b) => b.type === 'text')?.text ?? '';
+        return `${m.role}: ${text}`;
+      });
+      contextBlock = `\n\nRecent conversation (context only — already logged or answered, do NOT call tools for these again):\n${lines.join('\n')}`;
+    }
+
     const systemPrompt = `You are a warm, supportive assistant for parents tracking their baby's development and daily life.
 
 You are helping the parents of ${child.name}, who is ${age} (born ${child.date_of_birth}). Today is ${currentDate}.
@@ -437,7 +469,9 @@ When parents describe something that happened:
 - If a parent describes a first word, first steps, or other developmental milestone, use log_milestone
 - Only use ask_clarification when the message is truly ambiguous and you cannot make a reasonable guess
 
-Be concise and supportive. Every reply that logs something must clearly tell the parent what was saved.`;
+Be concise and supportive. Every reply that logs something must clearly tell the parent what was saved.
+
+IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in the current turn. Do NOT call tools for anything in the "Recent conversation" context section — those events are already saved.${contextBlock}`;
 
     // System prompt with prompt caching — saves repeated input tokens after the first call
     const systemParam = [
@@ -455,6 +489,7 @@ Be concise and supportive. Every reply that logs something must clearly tell the
     // ── Agentic loop ──────────────────────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
+    // Only the current batch goes to Claude as turns — context is embedded in the system prompt
     const apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
       role: m.role,
       content: m.content as string | Anthropic.ContentBlockParam[],

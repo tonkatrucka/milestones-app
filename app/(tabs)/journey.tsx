@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,7 +9,8 @@ import { useActiveChild } from '@/hooks/use-active-child';
 import { useJourneyTimeline } from '@/hooks/use-journey-timeline';
 import { useAppStore } from '@/store/app-store';
 import { Timeline } from '@/components/journey/Timeline';
-import type { Milestone, Memory } from '@/lib/database.types';
+import { EditEventModal } from '@/components/events/EditEventModal';
+import type { DailyEvent, Milestone, Memory } from '@/lib/database.types';
 
 export default function JourneyScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -22,6 +24,8 @@ export default function JourneyScreen() {
     activeChildId,
     activeChild?.date_of_birth ?? null,
   );
+
+  const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
 
   if (!activeChild) {
     return (
@@ -63,6 +67,15 @@ export default function JourneyScreen() {
         onMemoryPress={(memory: Memory) =>
           router.push(`/memory/${memory.id}` as any)
         }
+        onEventLongPress={setEditingEvent}
+      />
+
+      <EditEventModal
+        event={editingEvent}
+        visible={editingEvent !== null}
+        onClose={() => setEditingEvent(null)}
+        onSaved={() => { setEditingEvent(null); refresh(); }}
+        onDeleted={() => { setEditingEvent(null); refresh(); }}
       />
     </SafeAreaView>
   );

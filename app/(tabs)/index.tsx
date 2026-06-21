@@ -20,8 +20,9 @@ import { useDailyEvents } from '@/hooks/use-daily-events';
 import { QuickLogCard } from '@/components/home/QuickLogCard';
 import { TodayFeed } from '@/components/home/TodayFeed';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { logEvent } from '@/services/events';
-import type { EventType } from '@/lib/database.types';
+import { EditEventModal } from '@/components/events/EditEventModal';
+import { logEvent, updateEvent } from '@/services/events';
+import type { DailyEvent, EventType } from '@/lib/database.types';
 import { differenceInMonths, differenceInYears } from 'date-fns';
 
 function formatAge(dob: string): string {
@@ -53,28 +54,40 @@ export default function HomeScreen() {
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const [showChildPicker, setShowChildPicker] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
 
-  const handleQuickLog = useCallback(
-    async (type: EventType) => {
+  const handleLog = useCallback(
+    async (type: EventType, metadata: Record<string, unknown>, occurredAt?: Date) => {
       if (!activeChildId || !session?.user.id) return;
-      // Sleep always opens the log screen — it needs start/end time and mode detection
-      if (type === 'sleep') {
-        router.push(`/log/sleep` as any);
-        return;
-      }
       try {
         const event = await logEvent({
           childId: activeChildId,
           type,
+          metadata,
           userId: session.user.id,
+          occurredAt,
         });
         addEvent(event);
       } catch {
-        router.push(`/log/${type}` as any);
+        // Silently fail — tooltip already closed
       }
     },
-    [activeChildId, session],
+    [activeChildId, session, addEvent],
   );
+
+  const handleSleepWakeUp = useCallback(async (endAt: Date, startAt?: Date) => {
+    const openSleep = lastEvents.sleep;
+    if (!openSleep) return;
+    const meta = openSleep.metadata as Record<string, unknown>;
+    if (meta?.sleepEnd) return;
+    try {
+      await updateEvent(openSleep.id, {
+        metadata: { ...meta, sleepEnd: endAt.toISOString() },
+        ...(startAt ? { occurred_at: startAt.toISOString() } : {}),
+      });
+      refresh();
+    } catch { /* ignore */ }
+  }, [lastEvents, refresh]);
 
   if (isChildrenLoading) {
     return (
@@ -157,14 +170,18 @@ export default function HomeScreen() {
               key={type}
               type={type}
               lastEvent={lastEvents[type]}
-              onQuickLog={() => handleQuickLog(type)}
+              onLog={(metadata, occurredAt) => handleLog(type, metadata, occurredAt)}
+              onSleepWakeUp={(endAt, startAt) => handleSleepWakeUp(endAt, startAt)}
               onViewDetail={() => router.push(`/log/${type}` as any)}
             />
           ))}
         </View>
 
         {/* Today's feed */}
-        <TodayFeed events={todayEvents} />
+        <TodayFeed
+          events={todayEvents}
+          onEventLongPress={setEditingEvent}
+        />
 
         {/* Yesterday's feed — collapsed by default */}
         <TodayFeed
@@ -173,8 +190,17 @@ export default function HomeScreen() {
           emptyText="No events logged yesterday"
           collapsible
           defaultCollapsed
+          onEventLongPress={setEditingEvent}
         />
       </ScrollView>
+
+      <EditEventModal
+        event={editingEvent}
+        visible={editingEvent !== null}
+        onClose={() => setEditingEvent(null)}
+        onSaved={() => { setEditingEvent(null); refresh(); }}
+        onDeleted={() => { setEditingEvent(null); refresh(); }}
+      />
     </SafeAreaView>
   );
 }

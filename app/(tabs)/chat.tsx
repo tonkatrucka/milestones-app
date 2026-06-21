@@ -179,7 +179,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}>
+        keyboardVerticalOffset={0}>
         <FlatList<ChatListItem>
           ref={listRef}
           style={styles.flex}
@@ -234,7 +234,10 @@ export default function ChatScreen() {
             {
               backgroundColor: colors.card,
               borderTopColor: colors.border,
-              paddingVertical: INPUT_BAR_PADDING,
+              paddingTop: INPUT_BAR_PADDING,
+              // Push the input bar above the tab bar (tabBarHeight includes the
+              // bottom safe-area inset on notched devices).
+              paddingBottom: tabBarHeight + INPUT_BAR_PADDING,
             },
           ]}>
           <ChatInput

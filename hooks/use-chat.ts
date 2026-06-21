@@ -96,8 +96,7 @@ export function useChat(
       // Fetch a fresh 10-message context from DB — not the full UI-loaded history
       const context = await getRecentChatContext(childId, CONTEXT_LIMIT);
 
-      // Include image content blocks only for messages in this flush; older ones are text-only
-      const apiMessages = context.map((m) => {
+      const toApiMessage = (m: ChatMessage) => {
         if (m.media_urls.length > 0 && m.role === 'user' && batchIds.has(m.id)) {
           return {
             role: m.role as 'user' | 'assistant',
@@ -108,11 +107,19 @@ export function useChat(
           };
         }
         return { role: m.role as 'user' | 'assistant', content: m.content };
-      });
+      };
+
+      // Split into actionable (current batch) vs read-only context (prior history).
+      // Only batch messages may trigger tool calls in the edge function.
+      const batchMessages = context.filter((m) => batchIds.has(m.id));
+      const contextMessages = context.filter((m) => !batchIds.has(m.id));
+
+      if (batchMessages.length === 0) return;
 
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
-          messages: apiMessages,
+          messages: batchMessages.map(toApiMessage),
+          contextMessages: contextMessages.map(toApiMessage),
           child: { id: childId, name: childName, date_of_birth: childDob },
           currentDate: localDateString(),
         },

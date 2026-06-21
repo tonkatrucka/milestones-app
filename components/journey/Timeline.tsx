@@ -17,7 +17,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { differenceInMinutes, format, parseISO } from 'date-fns';
+import { differenceInMinutes, format, parse, parseISO } from 'date-fns';
+
+/**
+ * Parse a date-only string ("2026-06-21") as local midnight.
+ * Full ISO timestamps are passed through parseISO unchanged.
+ */
+function parseDate(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return parse(value, 'yyyy-MM-dd', new Date());
+  }
+  return parseISO(value);
+}
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
@@ -46,6 +57,7 @@ export interface TimelineProps {
   onRefresh: () => void;
   onMilestonePress: (milestone: Milestone) => void;
   onMemoryPress: (memory: Memory) => void;
+  onEventLongPress?: (event: DailyEvent) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -61,7 +73,7 @@ const EVENT_EMOJIS: Record<EventType, string> = {
 
 // ─── Timeline root ────────────────────────────────────────────────────────────
 
-export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onMemoryPress }: TimelineProps) {
+export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onMemoryPress, onEventLongPress }: TimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const tabBarHeight = useBottomTabBarHeight();
@@ -85,6 +97,7 @@ export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onM
           initiallyCollapsed={idx >= 2}
           onMilestonePress={onMilestonePress}
           onMemoryPress={onMemoryPress}
+          onEventLongPress={onEventLongPress}
           colors={colors}
         />
       ))}
@@ -150,6 +163,7 @@ function CollapsibleSection({
   initiallyCollapsed,
   onMilestonePress,
   onMemoryPress,
+  onEventLongPress,
   colors,
 }: {
   section: MonthSection;
@@ -157,6 +171,7 @@ function CollapsibleSection({
   initiallyCollapsed: boolean;
   onMilestonePress: (m: Milestone) => void;
   onMemoryPress: (m: Memory) => void;
+  onEventLongPress?: (event: DailyEvent) => void;
   colors: typeof Colors.light;
 }) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
@@ -209,14 +224,19 @@ function CollapsibleSection({
     ...visibleMemories.map((m) => ({ kind: 'memory' as const, data: m })),
     ...visibleDays.map((d) => ({ kind: 'day' as const, data: d })),
   ];
+  // Derive the local calendar date consistently for sorting so that a stored
+  // value of "2026-06-20T14:00:00Z" (June 21 midnight AEST) sorts the same
+  // way it is displayed (21 Jun), not as the raw UTC date (20 Jun).
+  const localDateKey = (v: string) => format(parseDate(v), 'yyyy-MM-dd');
+
   entries.sort((a, b) => {
     const dateA =
-      a.kind === 'milestone' ? a.data.achieved_at.slice(0, 10) :
-      a.kind === 'memory'    ? a.data.occurred_at.slice(0, 10) :
+      a.kind === 'milestone' ? localDateKey(a.data.achieved_at) :
+      a.kind === 'memory'    ? localDateKey(a.data.occurred_at) :
       a.data.dateKey;
     const dateB =
-      b.kind === 'milestone' ? b.data.achieved_at.slice(0, 10) :
-      b.kind === 'memory'    ? b.data.occurred_at.slice(0, 10) :
+      b.kind === 'milestone' ? localDateKey(b.data.achieved_at) :
+      b.kind === 'memory'    ? localDateKey(b.data.occurred_at) :
       b.data.dateKey;
     if (dateA !== dateB) return dateB.localeCompare(dateA);
     // Same date ordering: milestone > memory > day
@@ -304,7 +324,12 @@ function CollapsibleSection({
                 onPress={() => onMemoryPress(entry.data as Memory)}
               />
             ) : (
-              <EventDayRow key={(entry.data as EventDay).dateKey} day={entry.data as EventDay} colors={colors} />
+              <EventDayRow
+                key={(entry.data as EventDay).dateKey}
+                day={entry.data as EventDay}
+                colors={colors}
+                onEventLongPress={onEventLongPress}
+              />
             ),
           )}
         </View>
@@ -344,7 +369,7 @@ function MilestoneCard({
               </Text>
             </View>
             <Text style={[styles.milestoneDate, { color: colors.muted }]}>
-              {format(parseISO(milestone.achieved_at), 'd MMM')}
+              {format(parseDate(milestone.achieved_at), 'd MMM')}
             </Text>
           </View>
           <Text style={[styles.milestoneTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
@@ -388,7 +413,7 @@ function MemoryCard({
               <Text style={[styles.categoryText, { color: MemoryColor }]}>📸 Memory</Text>
             </View>
             <Text style={[styles.milestoneDate, { color: colors.muted }]}>
-              {format(parseISO(memory.occurred_at), 'd MMM')}
+              {format(parseDate(memory.occurred_at), 'd MMM')}
             </Text>
           </View>
           <Text style={[styles.milestoneTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
@@ -424,7 +449,15 @@ interface TooltipState {
   height: number;
 }
 
-function EventDayRow({ day, colors }: { day: EventDay; colors: typeof Colors.light }) {
+function EventDayRow({
+  day,
+  colors,
+  onEventLongPress,
+}: {
+  day: EventDay;
+  colors: typeof Colors.light;
+  onEventLongPress?: (event: DailyEvent) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const detailH = useSharedValue(0);
@@ -568,7 +601,12 @@ function EventDayRow({ day, colors }: { day: EventDay; colors: typeof Colors.lig
         <View style={styles.dayDetails}>
           {detailItems.map((item) =>
             item.kind === 'event' ? (
-              <EventDetailRow key={item.event.id} event={item.event} colors={colors} />
+              <EventDetailRow
+                key={item.event.id}
+                event={item.event}
+                colors={colors}
+                onLongPress={onEventLongPress ? () => onEventLongPress(item.event) : undefined}
+              />
             ) : (
               <WakeUpRow key={`wake-${item.time}`} time={item.time} colors={colors} />
             ),
@@ -620,24 +658,41 @@ function formatEventDetail(event: DailyEvent): string {
     }
     case 'sleep': {
       const m = meta as SleepMetadata;
-      if (m?.sleepEnd) {
-        const mins = differenceInMinutes(parseISO(m.sleepEnd), parseISO(event.occurred_at));
-        if (mins <= 0) return '😴 Ongoing';
+      const fmtMins = (mins: number) => {
         if (mins >= 60) {
           const h = Math.floor(mins / 60);
           const rem = mins % 60;
-          return rem > 0 ? `😴 ${h}h ${rem}min` : `😴 ${h}h`;
+          return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
         }
-        return `😴 ${mins}min`;
+        return `${mins}m`;
+      };
+      if (m?.sleepEnd) {
+        const mins = Math.max(0, differenceInMinutes(parseISO(m.sleepEnd), parseISO(event.occurred_at)));
+        return `😴 ${fmtMins(mins)}`;
       }
-      return '😴 Ongoing';
+      // No sleepEnd — only "Ongoing" if it started today
+      const todayKey = format(new Date(), 'yyyy-MM-dd');
+      const startKey = format(parseDate(event.occurred_at), 'yyyy-MM-dd');
+      if (startKey === todayKey) {
+        const mins = differenceInMinutes(new Date(), parseDate(event.occurred_at));
+        return mins > 0 ? `😴 ${fmtMins(mins)}` : '😴 Ongoing';
+      }
+      return '😴 —';
     }
     default:
       return event.type;
   }
 }
 
-function EventDetailRow({ event, colors }: { event: DailyEvent; colors: typeof Colors.light }) {
+function EventDetailRow({
+  event,
+  colors,
+  onLongPress,
+}: {
+  event: DailyEvent;
+  colors: typeof Colors.light;
+  onLongPress?: () => void;
+}) {
   const accent = EventColors[event.type as EventType];
   return (
     <View style={[styles.eventDetailRow, { borderLeftColor: accent }]}>
@@ -654,6 +709,15 @@ function EventDetailRow({ event, colors }: { event: DailyEvent; colors: typeof C
           </Text>
         ) : null}
       </View>
+      {onLongPress && (
+        <Pressable
+          onPress={onLongPress}
+          hitSlop={12}
+          style={styles.eventDetailMenu}
+          android_ripple={{ color: colors.border, borderless: true, radius: 16 }}>
+          <Ionicons name="ellipsis-horizontal" size={16} color={colors.muted} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -861,7 +925,20 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
         const startStr = format(parseISO(e.occurred_at), 'h:mm a');
         const isLast = idx === events.length - 1;
 
+        const fmtDur = (mins: number) => {
+          if (mins >= 60) {
+            const h = Math.floor(mins / 60);
+            const rem = mins % 60;
+            return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+          }
+          return `${mins}m`;
+        };
+
         if (!meta?.sleepEnd) {
+          const todayKey = format(new Date(), 'yyyy-MM-dd');
+          const startKey = format(parseDate(e.occurred_at), 'yyyy-MM-dd');
+          const isOngoing = startKey === todayKey;
+          const elapsedMins = differenceInMinutes(new Date(), parseDate(e.occurred_at));
           return (
             <View
               key={e.id}
@@ -871,28 +948,21 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
                 isLast && { borderBottomWidth: 0 },
               ]}>
               <Text style={[styles.tooltipRowTime, { color: colors.muted }]}>{startStr}</Text>
-              <Text style={[styles.tooltipRowLabel, { color: colors.text }]}>Ongoing…</Text>
+              {isOngoing && elapsedMins > 0 ? (
+                <View style={[styles.tooltipCountBadge, { backgroundColor: EventColors.sleep + '20' }]}>
+                  <Text style={[styles.tooltipCountText, { color: EventColors.sleep }]}>
+                    {fmtDur(elapsedMins)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.tooltipRowLabel, { color: colors.muted }]}>—</Text>
+              )}
             </View>
           );
         }
 
         const endStr = format(parseISO(meta.sleepEnd), 'h:mm a');
-        const mins = differenceInMinutes(parseISO(meta.sleepEnd), parseISO(e.occurred_at));
-        // Negative means sleepEnd < start (data inconsistency) — treat as ongoing
-        if (mins <= 0) {
-          return (
-            <View
-              key={e.id}
-              style={[
-                styles.tooltipRow,
-                { borderBottomColor: colors.border },
-                isLast && { borderBottomWidth: 0 },
-              ]}>
-              <Text style={[styles.tooltipRowTime, { color: colors.muted }]}>{startStr}</Text>
-              <Text style={[styles.tooltipRowLabel, { color: colors.text }]}>Ongoing…</Text>
-            </View>
-          );
-        }
+        const mins = Math.max(0, differenceInMinutes(parseISO(meta.sleepEnd), parseISO(e.occurred_at)));
         totalMins += mins;
         const duration =
           mins >= 60
@@ -1171,6 +1241,11 @@ const styles = StyleSheet.create({
   eventDetailNotes: {
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  eventDetailMenu: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Empty state

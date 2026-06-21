@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { format, parseISO, differenceInMonths, differenceInYears } from 'date-fns';
+import { format, parseISO, differenceInMonths, differenceInYears, parse } from 'date-fns';
 import { getMilestones } from '@/services/milestones';
 import { getRecentEvents } from '@/services/events';
 import { getMemories } from '@/services/memories';
@@ -24,8 +24,20 @@ export interface MonthSection {
   eventDays: EventDay[];
 }
 
+/**
+ * Parse a value that is either a date-only string ("2026-06-21") or a full
+ * ISO timestamp ("2026-06-21T14:30:00Z").  Date-only strings are treated as
+ * local midnight to avoid UTC-offset shifting the calendar date.
+ */
+function parseDate(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return parse(value, 'yyyy-MM-dd', new Date());
+  }
+  return parseISO(value);
+}
+
 function formatAge(dob: string, date: Date): string {
-  const birth = new Date(dob);
+  const birth = parseDate(dob);
   const months = differenceInMonths(date, birth);
   const years = differenceInYears(date, birth);
   if (months < 1) return 'Newborn';
@@ -57,12 +69,12 @@ function buildSections(
   };
 
   for (const m of milestones) {
-    const date = parseISO(m.achieved_at);
+    const date = parseDate(m.achieved_at);
     getOrCreate(format(date, 'yyyy-MM'), date).milestones.push(m);
   }
 
   for (const mem of memories) {
-    const date = parseISO(mem.occurred_at);
+    const date = parseDate(mem.occurred_at);
     getOrCreate(format(date, 'yyyy-MM'), date).memories.push(mem);
   }
 
@@ -145,10 +157,10 @@ function buildSections(
 
   for (const s of sections) {
     s.milestones.sort(
-      (a, b) => parseISO(b.achieved_at).getTime() - parseISO(a.achieved_at).getTime(),
+      (a, b) => parseDate(b.achieved_at).getTime() - parseDate(a.achieved_at).getTime(),
     );
     s.memories.sort(
-      (a, b) => parseISO(b.occurred_at).getTime() - parseISO(a.occurred_at).getTime(),
+      (a, b) => parseDate(b.occurred_at).getTime() - parseDate(a.occurred_at).getTime(),
     );
     s.eventDays.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
     for (const d of s.eventDays) {

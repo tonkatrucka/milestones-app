@@ -29,9 +29,8 @@ function getEventDetail(event: DailyEvent): string {
     case 'sleep': {
       const m = meta as Partial<SleepMetadata>;
       if (m.sleepEnd) {
-        const mins = differenceInMinutes(new Date(m.sleepEnd), new Date(event.occurred_at));
-        if (mins <= 0) return 'Ongoing';
-        if (mins >= 60) return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        const mins = Math.max(0, differenceInMinutes(new Date(m.sleepEnd), new Date(event.occurred_at)));
+        if (mins >= 60) return `${Math.floor(mins / 60)}h ${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`.trim();
         return `${mins}m`;
       }
       return 'Ongoing';
@@ -49,6 +48,7 @@ interface TodayFeedProps {
   emptyText?: string;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+  onEventLongPress?: (event: DailyEvent) => void;
 }
 
 export function TodayFeed({
@@ -57,6 +57,7 @@ export function TodayFeed({
   emptyText = 'No events logged yet today',
   collapsible = false,
   defaultCollapsed = false,
+  onEventLongPress,
 }: TodayFeedProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
@@ -100,6 +101,7 @@ export function TodayFeed({
                 event={event}
                 isLast={idx === sorted.length - 1}
                 colors={colors}
+                onLongPress={onEventLongPress ? () => onEventLongPress(event) : undefined}
               />
             ))}
           </View>
@@ -115,19 +117,24 @@ function TimelineRow({
   event,
   isLast,
   colors,
+  onLongPress,
 }: {
   event: DailyEvent;
   isLast: boolean;
   colors: typeof Colors.light;
+  onLongPress?: () => void;
 }) {
   const accent = EventColors[event.type as EventType];
   const detail = getEventDetail(event);
 
   return (
-    <View style={styles.row}>
+    <Pressable
+      style={styles.row}
+      onLongPress={onLongPress}
+      delayLongPress={400}
+      android_ripple={onLongPress ? { color: accent + '22', borderless: false } : null}>
       {/* ── Left gutter: line + dot ── */}
       <View style={styles.gutter}>
-        {/* Vertical connector line — hidden on last row */}
         {!isLast && (
           <View style={[styles.line, { backgroundColor: colors.border }]} />
         )}
@@ -151,7 +158,7 @@ function TimelineRow({
           {format(new Date(event.occurred_at), 'h:mm a')}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -73,7 +73,7 @@ export async function logEvent(params: {
 
 export async function updateEvent(
   id: string,
-  updates: { notes?: string; metadata?: EventMetadata; occurred_at?: string },
+  updates: { notes?: string | null; metadata?: EventMetadata; occurred_at?: string },
 ): Promise<DailyEvent> {
   const { data, error } = await supabase
     .from('daily_events')
