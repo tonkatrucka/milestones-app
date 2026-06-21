@@ -1,6 +1,13 @@
-# Welcome to your Expo app 👋
+# Milestones
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activities, milestones, and memories through a conversational assistant and dedicated tabs.
+
+## Features
+
+- **Assistant (Chat)** — natural-language logging via Claude (nappy, feeds, sleep, milestones, memories)
+- **Memories** — chronological photo memories with tags
+- **Journey** — unified timeline of milestones and memories
+- **Milestones** — editable milestone records with photos and share cards
 
 ## Get started
 
@@ -10,41 +17,50 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Configure environment — create `.env` with your Supabase project URL and anon key (see `.env.example` if present).
+
+3. Run database migrations — apply `supabase/migrations/003_memories_and_chat.sql` in the Supabase SQL editor (or via `supabase db push`).
+
+4. Deploy the chat edge function
+
+   ```bash
+   npx supabase functions deploy chat
+   npx supabase secrets set ANTHROPIC_API_KEY=your_key_here
+   ```
+
+5. Start the app
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+## Chat assistant — cost optimisations
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+The assistant is designed to minimise Anthropic API usage:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+| Optimisation | Behaviour |
+| --- | --- |
+| **3s debounce** | Rapid messages within 3 seconds are batched into one API call |
+| **10-message context** | Only the last 10 messages are sent to Claude; UI loads full history by day |
+| **Haiku / Sonnet routing** | Text-only → `claude-haiku-4-5`; messages with photos → `claude-sonnet-4-6` |
+| **Intent parser** | Simple phrases (`"120ml"`, `"wet nappy"`, `"nap"`) bypass Claude entirely |
+| **Activity tool shortcut** | Meal/nappy/sleep logs skip the second Claude turn; server returns confirmation |
+| **Prompt caching** | System prompt and tool definitions are cached across requests |
+| **Quick-log chips** | One-tap chips above the chat input for common activities |
 
-## Get a fresh project
+## Project structure
 
-When you're ready, run:
-
-```bash
-npm run reset-project
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+app/                  Expo Router screens (tabs, memory, milestone)
+components/           UI components (chat, journey, memories)
+hooks/                React hooks (use-chat, use-memories, use-journey-timeline)
+services/             Supabase data layer
+supabase/
+  functions/chat/     Claude edge function + intent parser
+  migrations/         Database schema
+```
 
 ## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Expo documentation](https://docs.expo.dev/)
+- [Supabase Edge Functions](https://supabase.com/docs/guides/functions)

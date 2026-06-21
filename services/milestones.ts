@@ -53,6 +53,7 @@ export async function createMilestone(params: {
 export async function updateMilestone(
   id: string,
   updates: {
+    category?: MilestoneCategory;
     title?: string;
     description?: string;
     achieved_at?: string;

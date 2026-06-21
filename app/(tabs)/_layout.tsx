@@ -54,11 +54,33 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="memories"
+        options={{
+          title: 'Memories',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'images' : 'images-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'cog' : 'cog-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Assistant',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />

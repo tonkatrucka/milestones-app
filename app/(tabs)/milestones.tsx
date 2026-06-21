@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { CATEGORY_LABELS, CATEGORY_EMOJIS } from '@/constants/milestone-templates';
 import type { MilestoneCategory } from '@/lib/database.types';
 
-const CATEGORIES: Array<MilestoneCategory | 'all'> = ['all', 'word', 'steps', 'physical', 'custom'];
+const CATEGORIES: Array<MilestoneCategory | 'all'> = ['all', 'language', 'movement', 'development'];
 
 export default function MilestonesScreen() {
   const scheme = useColorScheme() ?? 'light';

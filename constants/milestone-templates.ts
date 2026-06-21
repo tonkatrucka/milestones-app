@@ -1,4 +1,6 @@
-export type MilestoneCategory = 'word' | 'steps' | 'physical' | 'custom';
+import type { MilestoneCategory } from '@/lib/database.types';
+
+export type { MilestoneCategory };
 
 export interface MilestoneTemplate {
   title: string;
@@ -16,25 +18,20 @@ export const AGE_BRACKETS: AgeBracket[] = [
     minMonths: 0,
     maxMonths: 6,
     suggestions: {
-      word: [
+      language: [
         { title: 'First coo', emoji: '🗣️' },
         { title: 'First babble', emoji: '👶' },
         { title: 'Recognises my voice', emoji: '👂' },
       ],
-      steps: [
+      movement: [
         { title: 'First roll over', emoji: '🔄' },
         { title: 'Holds head up', emoji: '💪' },
         { title: 'Sits with support', emoji: '🪑' },
       ],
-      physical: [
+      development: [
         { title: 'First smile', emoji: '😊' },
         { title: 'Tracks objects with eyes', emoji: '👀' },
         { title: 'First laugh', emoji: '😂' },
-      ],
-      custom: [
-        { title: 'First bath', emoji: '🛁' },
-        { title: 'First outing', emoji: '🌳' },
-        { title: 'Met grandparents', emoji: '👴' },
       ],
     },
   },
@@ -42,25 +39,20 @@ export const AGE_BRACKETS: AgeBracket[] = [
     minMonths: 6,
     maxMonths: 12,
     suggestions: {
-      word: [
+      language: [
         { title: 'First "mama"', emoji: '🤱' },
         { title: 'First "dada"', emoji: '👨‍👧' },
         { title: 'Responds to name', emoji: '👂' },
       ],
-      steps: [
+      movement: [
         { title: 'Sits independently', emoji: '🧘' },
         { title: 'First crawl', emoji: '🐾' },
         { title: 'Pulls to stand', emoji: '🏋️' },
       ],
-      physical: [
+      development: [
         { title: 'First tooth', emoji: '🦷' },
         { title: 'First solid food', emoji: '🥕' },
         { title: 'Waves bye-bye', emoji: '👋' },
-      ],
-      custom: [
-        { title: 'First swim', emoji: '🏊' },
-        { title: 'First birthday', emoji: '🎂' },
-        { title: 'First holiday', emoji: '✈️' },
       ],
     },
   },
@@ -68,25 +60,20 @@ export const AGE_BRACKETS: AgeBracket[] = [
     minMonths: 12,
     maxMonths: 24,
     suggestions: {
-      word: [
+      language: [
         { title: 'First word', emoji: '💬' },
         { title: 'Two-word phrases', emoji: '🗣️' },
         { title: 'Says 10+ words', emoji: '📢' },
       ],
-      steps: [
+      movement: [
         { title: 'First independent steps', emoji: '👣' },
         { title: 'Walking confidently', emoji: '🚶' },
         { title: 'First run', emoji: '🏃' },
       ],
-      physical: [
+      development: [
         { title: 'Stacks blocks', emoji: '🧱' },
         { title: 'Uses a spoon', emoji: '🥄' },
         { title: 'Scribbles with crayon', emoji: '🖍️' },
-      ],
-      custom: [
-        { title: 'First haircut', emoji: '✂️' },
-        { title: 'Favourite toy', emoji: '🧸' },
-        { title: 'First friend', emoji: '👫' },
       ],
     },
   },
@@ -94,25 +81,20 @@ export const AGE_BRACKETS: AgeBracket[] = [
     minMonths: 24,
     maxMonths: 999,
     suggestions: {
-      word: [
+      language: [
         { title: 'Full sentences', emoji: '💬' },
         { title: 'Tells a story', emoji: '📖' },
         { title: 'Knows colours', emoji: '🌈' },
       ],
-      steps: [
+      movement: [
         { title: 'Climbs stairs alone', emoji: '🪜' },
         { title: 'Kicks a ball', emoji: '⚽' },
         { title: 'Jumps with both feet', emoji: '🦘' },
       ],
-      physical: [
+      development: [
         { title: 'Draws a circle', emoji: '⭕' },
         { title: 'Uses scissors', emoji: '✂️' },
         { title: 'Dresses independently', emoji: '👗' },
-      ],
-      custom: [
-        { title: 'First day at nursery', emoji: '🏫' },
-        { title: 'Rides a balance bike', emoji: '🚲' },
-        { title: 'First sleepover', emoji: '🌙' },
       ],
     },
   },
@@ -126,15 +108,13 @@ export function getSuggestionsForAge(ageMonths: number, category: MilestoneCateg
 }
 
 export const CATEGORY_LABELS: Record<MilestoneCategory, string> = {
-  word: 'Language',
-  steps: 'Movement',
-  physical: 'Development',
-  custom: 'Moments',
+  language: 'Language',
+  movement: 'Movement',
+  development: 'Development',
 };
 
 export const CATEGORY_EMOJIS: Record<MilestoneCategory, string> = {
-  word: '💬',
-  steps: '🏃',
-  physical: '🌱',
-  custom: '⭐',
+  language: '💬',
+  movement: '🏃',
+  development: '🌱',
 };

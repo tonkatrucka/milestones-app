@@ -1,7 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type EventType = 'nappy' | 'meal' | 'sleep';
-export type MilestoneCategory = 'word' | 'steps' | 'physical' | 'custom';
+export type MilestoneCategory = 'language' | 'movement' | 'development';
 export type MemberRole = 'owner' | 'caregiver' | 'viewer';
 
 export interface Child {
@@ -59,6 +59,27 @@ export interface Milestone {
   created_at: string;
 }
 
+export interface Memory {
+  id: string;
+  child_id: string;
+  title: string;
+  description: string | null;
+  occurred_at: string;
+  media_urls: string[];
+  tags: string[];
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  child_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  media_urls: string[];
+  created_at: string;
+}
+
 export interface Invite {
   id: string;
   child_id: string;
@@ -93,6 +114,16 @@ export interface Database {
         Row: Milestone;
         Insert: Omit<Milestone, 'id' | 'created_at'>;
         Update: Partial<Omit<Milestone, 'id' | 'created_at'>>;
+      };
+      memories: {
+        Row: Memory;
+        Insert: Omit<Memory, 'id' | 'created_at'>;
+        Update: Partial<Omit<Memory, 'id' | 'created_at'>>;
+      };
+      chat_messages: {
+        Row: ChatMessage;
+        Insert: Omit<ChatMessage, 'id' | 'created_at'>;
+        Update: Partial<Omit<ChatMessage, 'id' | 'created_at'>>;
       };
       invites: {
         Row: Invite;

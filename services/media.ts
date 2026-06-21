@@ -33,6 +33,48 @@ export async function deleteMilestoneMedia(url: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function uploadMemoryMedia(
+  childId: string,
+  localUri: string,
+  mimeType = 'image/jpeg',
+): Promise<string> {
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const path = `memories/${childId}/${filename}`;
+
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('milestone-media')
+    .upload(path, blob, { contentType: mimeType, upsert: false });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from('milestone-media').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function uploadChatMedia(
+  childId: string,
+  localUri: string,
+  mimeType = 'image/jpeg',
+): Promise<string> {
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const path = `${childId}/${filename}`;
+
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('chat-media')
+    .upload(path, blob, { contentType: mimeType, upsert: false });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function uploadChildAvatar(
   childId: string,
   localUri: string,

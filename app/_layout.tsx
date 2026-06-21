@@ -103,7 +103,9 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding/add-child" options={{ presentation: 'modal', title: 'Add a child' }} />
         <Stack.Screen name="log/[type]" options={{ presentation: 'modal', title: 'Log event' }} />
         <Stack.Screen name="milestone/new" options={{ presentation: 'modal', title: 'New milestone' }} />
-        <Stack.Screen name="milestone/[id]" options={{ title: '' }} />
+        <Stack.Screen name="milestone/[id]" options={{ title: 'Edit milestone' }} />
+        <Stack.Screen name="memory/new" options={{ presentation: 'modal', title: 'New memory' }} />
+        <Stack.Screen name="memory/[id]" options={{ title: 'Edit memory' }} />
         <Stack.Screen name="share/card" options={{ presentation: 'modal', title: 'Share' }} />
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', title: 'Accept invite' }} />
         <Stack.Screen name="+not-found" />

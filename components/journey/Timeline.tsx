@@ -21,7 +21,7 @@ import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
-import { Colors, EventColors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
+import { Colors, EventColors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { CATEGORY_EMOJIS } from '@/constants/milestone-templates';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { MonthSection, EventDay } from '@/hooks/use-journey-timeline';
@@ -29,6 +29,7 @@ import type {
   DailyEvent,
   EventType,
   MealMetadata,
+  Memory,
   Milestone,
   MilestoneCategory,
   NappyMetadata,
@@ -37,13 +38,14 @@ import type {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FilterMode = 'all' | 'milestones' | 'activities';
+type FilterMode = 'all' | 'milestones' | 'memories' | 'activities';
 
 export interface TimelineProps {
   sections: MonthSection[];
   isLoading: boolean;
   onRefresh: () => void;
   onMilestonePress: (milestone: Milestone) => void;
+  onMemoryPress: (memory: Memory) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -59,7 +61,7 @@ const EVENT_EMOJIS: Record<EventType, string> = {
 
 // ─── Timeline root ────────────────────────────────────────────────────────────
 
-export function Timeline({ sections, isLoading, onRefresh, onMilestonePress }: TimelineProps) {
+export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onMemoryPress }: TimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const tabBarHeight = useBottomTabBarHeight();
@@ -82,6 +84,7 @@ export function Timeline({ sections, isLoading, onRefresh, onMilestonePress }: T
           // Keep the two most recent months open, collapse older ones
           initiallyCollapsed={idx >= 2}
           onMilestonePress={onMilestonePress}
+          onMemoryPress={onMemoryPress}
           colors={colors}
         />
       ))}
@@ -113,6 +116,7 @@ function FilterTabs({
   const TABS: { key: FilterMode; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'milestones', label: '⭐ Milestones' },
+    { key: 'memories', label: '📸 Memories' },
     { key: 'activities', label: '📋 Activities' },
   ];
 
@@ -145,12 +149,14 @@ function CollapsibleSection({
   filter,
   initiallyCollapsed,
   onMilestonePress,
+  onMemoryPress,
   colors,
 }: {
   section: MonthSection;
   filter: FilterMode;
   initiallyCollapsed: boolean;
   onMilestonePress: (m: Milestone) => void;
+  onMemoryPress: (m: Memory) => void;
   colors: typeof Colors.light;
 }) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
@@ -176,11 +182,13 @@ function CollapsibleSection({
     transform: [{ rotate: `${chevronRot.value}deg` }],
   }));
 
-  const showMilestones = filter !== 'activities';
-  const showActivities = filter !== 'milestones';
+  const showMilestones = filter !== 'activities' && filter !== 'memories';
+  const showMemories = filter !== 'activities' && filter !== 'milestones';
+  const showActivities = filter !== 'milestones' && filter !== 'memories';
   const visibleMilestones = showMilestones ? section.milestones : [];
+  const visibleMemories = showMemories ? section.memories : [];
   const visibleDays = showActivities ? section.eventDays : [];
-  const hasContent = visibleMilestones.length > 0 || visibleDays.length > 0;
+  const hasContent = visibleMilestones.length > 0 || visibleMemories.length > 0 || visibleDays.length > 0;
 
   if (!hasContent) return null;
 
@@ -191,20 +199,29 @@ function CollapsibleSection({
   const avgMl      = daysCount > 0 ? section.eventDays.reduce((s, d) => s + d.totalMl, 0) / daysCount : 0;
   const avgSleepH  = daysCount > 0 ? section.eventDays.reduce((s, d) => s + d.totalSleepMins, 0) / daysCount / 60 : 0;
 
-  // ── Merge milestones + event-days into a single date-sorted list ───────
-  type TimelineEntry = { kind: 'milestone'; data: Milestone } | { kind: 'day'; data: EventDay };
+  // ── Merge milestones + memories + event-days into a single date-sorted list ──
+  type TimelineEntry =
+    | { kind: 'milestone'; data: Milestone }
+    | { kind: 'memory'; data: Memory }
+    | { kind: 'day'; data: EventDay };
   const entries: TimelineEntry[] = [
     ...visibleMilestones.map((m) => ({ kind: 'milestone' as const, data: m })),
+    ...visibleMemories.map((m) => ({ kind: 'memory' as const, data: m })),
     ...visibleDays.map((d) => ({ kind: 'day' as const, data: d })),
   ];
   entries.sort((a, b) => {
-    const dateA = a.kind === 'milestone' ? a.data.achieved_at.slice(0, 10) : a.data.dateKey;
-    const dateB = b.kind === 'milestone' ? b.data.achieved_at.slice(0, 10) : b.data.dateKey;
-    if (dateA !== dateB) return dateB.localeCompare(dateA); // newest first
-    // Same date: milestone appears above the day row
-    if (a.kind === 'milestone' && b.kind === 'day') return -1;
-    if (a.kind === 'day' && b.kind === 'milestone') return 1;
-    return 0;
+    const dateA =
+      a.kind === 'milestone' ? a.data.achieved_at.slice(0, 10) :
+      a.kind === 'memory'    ? a.data.occurred_at.slice(0, 10) :
+      a.data.dateKey;
+    const dateB =
+      b.kind === 'milestone' ? b.data.achieved_at.slice(0, 10) :
+      b.kind === 'memory'    ? b.data.occurred_at.slice(0, 10) :
+      b.data.dateKey;
+    if (dateA !== dateB) return dateB.localeCompare(dateA);
+    // Same date ordering: milestone > memory > day
+    const rank = (e: TimelineEntry) => e.kind === 'milestone' ? 0 : e.kind === 'memory' ? 1 : 2;
+    return rank(a) - rank(b);
   });
 
   return (
@@ -234,6 +251,13 @@ function CollapsibleSection({
             <View style={[styles.countBadge, { backgroundColor: '#F4A26122' }]}>
               <Text style={[styles.countBadgeText, { color: '#F4A261' }]} numberOfLines={1}>
                 {`⭐ ${section.milestones.length}`}
+              </Text>
+            </View>
+          )}
+          {section.memories.length > 0 && (
+            <View style={[styles.countBadge, { backgroundColor: MemoryColor + '22' }]}>
+              <Text style={[styles.countBadgeText, { color: MemoryColor }]} numberOfLines={1}>
+                {`📸 ${section.memories.length}`}
               </Text>
             </View>
           )}
@@ -271,6 +295,13 @@ function CollapsibleSection({
                 milestone={entry.data}
                 onPress={() => onMilestonePress(entry.data as Milestone)}
                 colors={colors}
+              />
+            ) : entry.kind === 'memory' ? (
+              <MemoryCard
+                key={entry.data.id}
+                memory={entry.data as Memory}
+                colors={colors}
+                onPress={() => onMemoryPress(entry.data as Memory)}
               />
             ) : (
               <EventDayRow key={(entry.data as EventDay).dateKey} day={entry.data as EventDay} colors={colors} />
@@ -323,6 +354,59 @@ function MilestoneCard({
             <Text style={[styles.milestoneDesc, { color: colors.muted }]} numberOfLines={2}>
               {milestone.description}
             </Text>
+          ) : null}
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ─── Memory Card ─────────────────────────────────────────────────────────────
+
+function MemoryCard({
+  memory,
+  colors,
+  onPress,
+}: {
+  memory: Memory;
+  colors: typeof Colors.light;
+  onPress: () => void;
+}) {
+  const photo = memory.media_urls[0];
+
+  return (
+    <Animated.View entering={FadeInDown.duration(280).springify()}>
+      <Pressable
+        style={[styles.memoryCard, { backgroundColor: colors.card, borderLeftColor: MemoryColor }]}
+        onPress={onPress}>
+        {photo ? (
+          <Image source={{ uri: photo }} style={styles.memoryPhoto} contentFit="cover" />
+        ) : null}
+        <View style={styles.memoryBody}>
+          <View style={styles.memoryTopRow}>
+            <View style={[styles.categoryPill, { backgroundColor: MemoryColor + '22' }]}>
+              <Text style={[styles.categoryText, { color: MemoryColor }]}>📸 Memory</Text>
+            </View>
+            <Text style={[styles.milestoneDate, { color: colors.muted }]}>
+              {format(parseISO(memory.occurred_at), 'd MMM')}
+            </Text>
+          </View>
+          <Text style={[styles.milestoneTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            {memory.title}
+          </Text>
+          {memory.description ? (
+            <Text style={[styles.milestoneDesc, { color: colors.muted }]} numberOfLines={2}>
+              {memory.description}
+            </Text>
+          ) : null}
+          {memory.tags.length > 0 ? (
+            <View style={styles.tagRow}>
+              {memory.tags.slice(0, 4).map((tag) => (
+                <View key={tag} style={[styles.tagPill, { backgroundColor: MemoryColor + '15' }]}>
+                  <Text style={[styles.tagText, { color: MemoryColor }]}>{tag}</Text>
+                </View>
+              ))}
+            </View>
           ) : null}
         </View>
       </Pressable>
@@ -512,7 +596,7 @@ function formatEventDetail(event: DailyEvent): string {
   const meta = event.metadata as Record<string, unknown>;
   switch (event.type) {
     case 'nappy': {
-      const m = meta as NappyMetadata;
+      const m = meta as unknown as NappyMetadata;
       const map: Record<string, string> = {
         wet: '💧 Wet',
         dirty: '🧷 Dirty',
@@ -522,7 +606,7 @@ function formatEventDetail(event: DailyEvent): string {
       return map[m?.nappyType] ?? 'Nappy change';
     }
     case 'meal': {
-      const m = meta as MealMetadata;
+      const m = meta as unknown as MealMetadata;
       const typeMap: Record<string, string> = {
         breast: '🤱 Breastfed',
         bottle: '🍼 Bottle',
@@ -973,7 +1057,46 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Event day
+  // Memory card
+  memoryCard: {
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.sm,
+    overflow: 'hidden',
+    borderLeftWidth: 4,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  memoryPhoto: {
+    width: '100%',
+    height: 120,
+  },
+  memoryBody: {
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  memoryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginTop: 2,
+  },
+  tagPill: {
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   dayBlock: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: Spacing.sm,

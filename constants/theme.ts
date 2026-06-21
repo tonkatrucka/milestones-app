@@ -43,11 +43,12 @@ export const EventColors = {
 } as const;
 
 export const MilestoneColors = {
-  word: '#F4A261',
-  steps: '#2A9D8F',
-  physical: '#E76F51',
-  custom: '#8E7CC3',
+  language: '#F4A261',
+  movement: '#2A9D8F',
+  development: '#E76F51',
 } as const;
+
+export const MemoryColor = '#9B59B6';
 
 export const Fonts = Platform.select({
   ios: {

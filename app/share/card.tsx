@@ -15,6 +15,7 @@ import { useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
 import { getMilestone } from '@/services/milestones';
 import { ShareCard } from '@/components/sharing/ShareCard';
@@ -42,7 +43,8 @@ export default function ShareCardScreen() {
   const { milestoneId } = useLocalSearchParams<{ milestoneId: string }>();
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const { activeChild } = useActiveChild();
+  const { session } = useAuth();
+  const { activeChild } = useActiveChild(session?.user.id ?? null);
 
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -15,16 +15,14 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format, parseISO } from 'date-fns';
-import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
+import { useActiveChild } from '@/hooks/use-active-child';
 import { useAppStore } from '@/store/app-store';
-import { deleteMilestone, getMilestone, updateMilestone } from '@/services/milestones';
-import { uploadMilestoneMedia } from '@/services/media';
-import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
-import type { Milestone, MilestoneCategory } from '@/lib/database.types';
-
-const CATEGORIES: MilestoneCategory[] = ['language', 'movement', 'development'];
+import { deleteMemory, getMemory, updateMemory } from '@/services/memories';
+import { uploadMemoryMedia } from '@/services/media';
+import type { Memory } from '@/lib/database.types';
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -43,43 +41,50 @@ function parseDateInput(value: string): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function parseTags(value: string): string[] {
+  return value
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 function toDisplayDate(isoDate: string): string {
-  return format(parseISO(isoDate), 'dd/MM/yyyy');
+  const d = parseISO(isoDate);
+  return format(d, 'dd/MM/yyyy');
 }
 
 function isLocalUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('ph://');
 }
 
-export default function MilestoneDetailScreen() {
+export default function MemoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const router = useRouter();
   const { session } = useAuth();
+  const { activeChild } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
 
-  const [milestone, setMilestone] = useState<Milestone | null>(null);
-  const [category, setCategory] = useState<MilestoneCategory>('development');
+  const [memory, setMemory] = useState<Memory | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [tags, setTags] = useState('');
   const [date, setDate] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [activePhoto, setActivePhoto] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const accent = MilestoneColors[category];
-
   useEffect(() => {
     if (!id) return;
-    getMilestone(id).then((m) => {
+    getMemory(id).then((m) => {
       if (m) {
-        setMilestone(m);
-        setCategory(m.category as MilestoneCategory);
+        setMemory(m);
         setTitle(m.title);
         setDescription(m.description ?? '');
-        setDate(toDisplayDate(m.achieved_at));
+        setTags(m.tags.join(', '));
+        setDate(toDisplayDate(m.occurred_at));
         setPhotos(m.media_urls);
       }
       setIsLoading(false);
@@ -88,7 +93,7 @@ export default function MilestoneDetailScreen() {
 
   const pickPhoto = async () => {
     if (photos.length >= 5) {
-      Alert.alert('Limit reached', 'You can add up to 5 photos per milestone.');
+      Alert.alert('Limit reached', 'You can add up to 5 photos per memory.');
       return;
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -110,11 +115,11 @@ export default function MilestoneDetailScreen() {
   const handleSave = async () => {
     if (!id || !activeChildId) return;
     if (!title.trim()) {
-      Alert.alert('Title required', 'Give this milestone a name.');
+      Alert.alert('Title required', 'Give this memory a name.');
       return;
     }
-    const achievedAt = parseDateInput(date);
-    if (!achievedAt) {
+    const occurredAt = parseDateInput(date);
+    if (!occurredAt) {
       Alert.alert('Invalid date', 'Enter the date as DD/MM/YYYY.');
       return;
     }
@@ -124,60 +129,57 @@ export default function MilestoneDetailScreen() {
       const mediaUrls: string[] = [];
       for (const uri of photos) {
         if (isLocalUri(uri)) {
-          mediaUrls.push(await uploadMilestoneMedia(activeChildId, uri));
+          mediaUrls.push(await uploadMemoryMedia(activeChildId, uri));
         } else {
           mediaUrls.push(uri);
         }
       }
 
-      await updateMilestone(id, {
-        category,
+      const updated = await updateMemory(id, {
         title: title.trim(),
         description: description.trim() || undefined,
-        achieved_at: achievedAt,
+        occurred_at: occurredAt,
+        tags: parseTags(tags),
         media_urls: mediaUrls,
       });
 
+      setMemory(updated);
+      setPhotos(updated.media_urls);
       router.back();
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save milestone.');
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save memory.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete milestone', 'Are you sure? This cannot be undone.', [
+    Alert.alert('Delete memory', 'Are you sure? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           if (!id) return;
-          await deleteMilestone(id);
+          await deleteMemory(id);
           router.back();
         },
       },
     ]);
   };
 
-  const handleShare = () => {
-    if (!id) return;
-    router.push({ pathname: '/share/card' as any, params: { milestoneId: id } });
-  };
-
   if (isLoading) {
     return (
       <View style={[styles.flex, styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={MemoryColor} />
       </View>
     );
   }
 
-  if (!milestone) {
+  if (!memory) {
     return (
       <View style={[styles.flex, styles.center, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Milestone not found</Text>
+        <Text style={{ color: colors.text }}>Memory not found</Text>
       </View>
     );
   }
@@ -200,7 +202,7 @@ export default function MilestoneDetailScreen() {
                       source={{ uri: url }}
                       style={[
                         styles.thumb,
-                        i === activePhoto && { borderWidth: 2, borderColor: accent },
+                        i === activePhoto && { borderWidth: 2, borderColor: MemoryColor },
                       ]}
                       contentFit="cover"
                     />
@@ -210,35 +212,15 @@ export default function MilestoneDetailScreen() {
             )}
           </View>
         ) : (
-          <View style={[styles.heroPlaceholder, { backgroundColor: accent + '22' }]}>
-            <Text style={styles.heroEmoji}>{CATEGORY_EMOJIS[category]}</Text>
+          <View style={[styles.heroPlaceholder, { backgroundColor: MemoryColor + '18' }]}>
+            <Text style={styles.heroEmoji}>📸</Text>
           </View>
         )}
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.form}>
-            <View>
-              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Category</Text>
-              <View style={styles.categoryRow}>
-                {CATEGORIES.map((cat) => {
-                  const isActive = cat === category;
-                  const catAccent = MilestoneColors[cat];
-                  return (
-                    <Pressable
-                      key={cat}
-                      style={[
-                        styles.categoryChip,
-                        { backgroundColor: isActive ? catAccent : catAccent + '22' },
-                      ]}
-                      onPress={() => setCategory(cat)}>
-                      <Text style={styles.categoryEmoji}>{CATEGORY_EMOJIS[cat]}</Text>
-                      <Text style={[styles.categoryText, { color: isActive ? '#fff' : catAccent }]}>
-                        {CATEGORY_LABELS[cat]}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+            <View style={[styles.chip, { backgroundColor: MemoryColor + '22' }]}>
+              <Text style={[styles.chipText, { color: MemoryColor }]}>📸 Memory</Text>
             </View>
 
             <View>
@@ -251,7 +233,7 @@ export default function MilestoneDetailScreen() {
             </View>
 
             <View>
-              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date achieved</Text>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>When did it happen?</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                 value={date}
@@ -263,15 +245,27 @@ export default function MilestoneDetailScreen() {
             </View>
 
             <View>
-              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Description</Text>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Story</Text>
               <TextInput
                 style={[styles.input, styles.textarea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                 value={description}
                 onChangeText={setDescription}
                 multiline
                 numberOfLines={4}
-                placeholder="Tell the story..."
+                placeholder="What made this moment special?"
                 placeholderTextColor={colors.muted}
+              />
+            </View>
+
+            <View>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Tags</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                value={tags}
+                onChangeText={setTags}
+                placeholder="family, travel, birthday"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
               />
             </View>
 
@@ -290,9 +284,9 @@ export default function MilestoneDetailScreen() {
                 ))}
                 {photos.length < 5 && (
                   <Pressable
-                    style={[styles.addPhotoButton, { backgroundColor: accent + '22' }]}
+                    style={[styles.addPhotoButton, { backgroundColor: MemoryColor + '22' }]}
                     onPress={pickPhoto}>
-                    <Text style={[styles.addPhotoIcon, { color: accent }]}>+</Text>
+                    <Text style={[styles.addPhotoIcon, { color: MemoryColor }]}>+</Text>
                   </Pressable>
                 )}
               </View>
@@ -304,7 +298,7 @@ export default function MilestoneDetailScreen() {
 
       <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <Pressable
-          style={[styles.actionButton, { backgroundColor: accent }, isSaving && { opacity: 0.7 }]}
+          style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
           onPress={handleSave}
           disabled={isSaving}>
           {isSaving ? (
@@ -312,11 +306,6 @@ export default function MilestoneDetailScreen() {
           ) : (
             <Text style={styles.actionButtonText}>Save changes</Text>
           )}
-        </Pressable>
-        <Pressable
-          style={[styles.actionButtonSecondary, { borderColor: accent }]}
-          onPress={handleShare}>
-          <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
         </Pressable>
         <Pressable
           style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
@@ -354,26 +343,21 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     paddingBottom: Spacing.xl,
   },
+  chip: {
+    alignSelf: 'flex-start',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
     marginBottom: Spacing.xs,
   },
-  categoryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  categoryChip: {
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  categoryEmoji: { fontSize: 16 },
-  categoryText: { fontSize: 14, fontWeight: '700' },
   input: {
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -408,7 +392,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: Spacing.md,
     paddingBottom: Spacing.xl,
-    gap: Spacing.sm,
+    gap: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   actionButton: {
@@ -421,30 +405,18 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 15,
-  },
-  actionButtonSecondary: {
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonSecondaryText: {
-    fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
   actionButtonOutline: {
     borderRadius: Radius.md,
     borderWidth: 1.5,
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionButtonOutlineText: {
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
 });

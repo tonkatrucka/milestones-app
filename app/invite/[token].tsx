@@ -22,7 +22,7 @@ export default function AcceptInviteScreen() {
   const colors = Colors[scheme];
   const router = useRouter();
   const { session } = useAuth();
-  const { isChildrenLoading } = useActiveChild();
+  const { isChildrenLoading } = useActiveChild(session?.user.id ?? null);
 
   const [state, setState] = useState<State>('idle');
   const [errorMessage, setErrorMessage] = useState('');

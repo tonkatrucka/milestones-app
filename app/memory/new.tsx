@@ -14,17 +14,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
 import { useAppStore } from '@/store/app-store';
-import { createMilestone } from '@/services/milestones';
-import { uploadMilestoneMedia } from '@/services/media';
-import { CATEGORY_LABELS, CATEGORY_EMOJIS } from '@/constants/milestone-templates';
-import type { MilestoneCategory } from '@/lib/database.types';
-
-const CATEGORIES: MilestoneCategory[] = ['language', 'movement', 'development'];
+import { createMemory } from '@/services/memories';
+import { uploadMemoryMedia } from '@/services/media';
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -43,7 +39,14 @@ function parseDateInput(value: string): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export default function NewMilestoneScreen() {
+function parseTags(value: string): string[] {
+  return value
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+export default function NewMemoryScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const router = useRouter();
@@ -51,9 +54,9 @@ export default function NewMilestoneScreen() {
   const { activeChild } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
 
-  const [category, setCategory] = useState<MilestoneCategory>('development');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [tags, setTags] = useState('');
   const [date, setDate] = useState(() => {
     const today = new Date();
     return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
@@ -61,11 +64,9 @@ export default function NewMilestoneScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const accent = MilestoneColors[category];
-
   const pickPhoto = async () => {
     if (photos.length >= 5) {
-      Alert.alert('Limit reached', 'You can add up to 5 photos per milestone.');
+      Alert.alert('Limit reached', 'You can add up to 5 photos per memory.');
       return;
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -86,11 +87,11 @@ export default function NewMilestoneScreen() {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      Alert.alert('Title required', 'Give this milestone a name.');
+      Alert.alert('Title required', 'Give this memory a name.');
       return;
     }
-    const achievedAt = parseDateInput(date);
-    if (!achievedAt) {
+    const occurredAt = parseDateInput(date);
+    if (!occurredAt) {
       Alert.alert('Invalid date', 'Enter the date as DD/MM/YYYY.');
       return;
     }
@@ -100,23 +101,23 @@ export default function NewMilestoneScreen() {
     try {
       const mediaUrls: string[] = [];
       for (const uri of photos) {
-        const url = await uploadMilestoneMedia(activeChildId, uri);
+        const url = await uploadMemoryMedia(activeChildId, uri);
         mediaUrls.push(url);
       }
 
-      await createMilestone({
+      await createMemory({
         childId: activeChildId,
-        category,
         title: title.trim(),
         description: description.trim() || undefined,
-        achievedAt,
+        occurredAt,
+        tags: parseTags(tags),
         mediaUrls,
         userId: session.user.id,
       });
 
       router.back();
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save milestone.');
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save memory.');
     } finally {
       setIsLoading(false);
     }
@@ -130,55 +131,27 @@ export default function NewMilestoneScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-          New Milestone
+        <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+          New Memory
         </Text>
         {activeChild && (
           <Text style={[styles.subtitle, { color: colors.muted }]}>for {activeChild.name}</Text>
         )}
 
-        {/* Category */}
-        <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Category</Text>
-          <View style={styles.categoryRow}>
-            {CATEGORIES.map((cat) => {
-              const isActive = cat === category;
-              const catAccent = MilestoneColors[cat];
-              return (
-                <Pressable
-                  key={cat}
-                  style={[
-                    styles.categoryChip,
-                    { backgroundColor: isActive ? catAccent : catAccent + '22' },
-                  ]}
-                  onPress={() => setCategory(cat)}>
-                  <Text style={styles.categoryEmoji}>{CATEGORY_EMOJIS[cat]}</Text>
-                  <Text style={[styles.categoryText, { color: isActive ? '#fff' : catAccent }]}>
-                    {CATEGORY_LABELS[cat]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Title */}
         <View>
           <Text style={[styles.fieldLabel, { color: colors.muted }]}>Title</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder={`E.g. ${CATEGORY_EMOJIS[category]} First ${category}`}
+            placeholder="E.g. First trip to the beach"
             placeholderTextColor={colors.muted}
             value={title}
             onChangeText={setTitle}
-            returnKeyType="next"
             autoFocus
           />
         </View>
 
-        {/* Date */}
         <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date achieved</Text>
+          <Text style={[styles.fieldLabel, { color: colors.muted }]}>When did it happen?</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
             placeholder="DD/MM/YYYY"
@@ -189,12 +162,11 @@ export default function NewMilestoneScreen() {
           />
         </View>
 
-        {/* Description */}
         <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Description (optional)</Text>
+          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Story (optional)</Text>
           <TextInput
             style={[styles.input, styles.textarea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="Tell the story..."
+            placeholder="What made this moment special?"
             placeholderTextColor={colors.muted}
             value={description}
             onChangeText={setDescription}
@@ -203,7 +175,18 @@ export default function NewMilestoneScreen() {
           />
         </View>
 
-        {/* Photos */}
+        <View>
+          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Tags (optional)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+            placeholder="family, travel, birthday"
+            placeholderTextColor={colors.muted}
+            value={tags}
+            onChangeText={setTags}
+            autoCapitalize="none"
+          />
+        </View>
+
         <View>
           <Text style={[styles.fieldLabel, { color: colors.muted }]}>Photos (up to 5)</Text>
           <View style={styles.photoRow}>
@@ -214,9 +197,9 @@ export default function NewMilestoneScreen() {
             ))}
             {photos.length < 5 && (
               <Pressable
-                style={[styles.addPhotoButton, { backgroundColor: accent + '22' }]}
+                style={[styles.addPhotoButton, { backgroundColor: MemoryColor + '22' }]}
                 onPress={pickPhoto}>
-                <Text style={[styles.addPhotoIcon, { color: accent }]}>+</Text>
+                <Text style={[styles.addPhotoIcon, { color: MemoryColor }]}>+</Text>
               </Pressable>
             )}
           </View>
@@ -226,13 +209,13 @@ export default function NewMilestoneScreen() {
         </View>
 
         <Pressable
-          style={[styles.saveButton, { backgroundColor: accent }, isLoading && { opacity: 0.7 }]}
+          style={[styles.saveButton, { backgroundColor: MemoryColor }, isLoading && { opacity: 0.7 }]}
           onPress={handleSave}
           disabled={isLoading}>
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Save milestone</Text>
+            <Text style={styles.saveButtonText}>Save memory</Text>
           )}
         </Pressable>
       </ScrollView>
@@ -247,7 +230,7 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     paddingBottom: 60,
   },
-  title: {
+  heading: {
     fontSize: 26,
     fontWeight: '800',
     marginTop: Spacing.sm,
@@ -262,21 +245,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
     letterSpacing: 0.3,
   },
-  categoryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  categoryChip: {
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  categoryEmoji: { fontSize: 16 },
-  categoryText: { fontSize: 14, fontWeight: '700' },
   input: {
     borderRadius: Radius.md,
     borderWidth: 1,

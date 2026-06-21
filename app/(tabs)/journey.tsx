@@ -8,7 +8,7 @@ import { useActiveChild } from '@/hooks/use-active-child';
 import { useJourneyTimeline } from '@/hooks/use-journey-timeline';
 import { useAppStore } from '@/store/app-store';
 import { Timeline } from '@/components/journey/Timeline';
-import type { Milestone } from '@/lib/database.types';
+import type { Milestone, Memory } from '@/lib/database.types';
 
 export default function JourneyScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -59,6 +59,9 @@ export default function JourneyScreen() {
         onRefresh={refresh}
         onMilestonePress={(milestone: Milestone) =>
           router.push(`/milestone/${milestone.id}` as any)
+        }
+        onMemoryPress={(memory: Memory) =>
+          router.push(`/memory/${memory.id}` as any)
         }
       />
     </SafeAreaView>

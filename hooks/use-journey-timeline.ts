@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { format, parseISO, differenceInMonths, differenceInYears } from 'date-fns';
 import { getMilestones } from '@/services/milestones';
 import { getRecentEvents } from '@/services/events';
-import type { DailyEvent, EventType, Milestone } from '@/lib/database.types';
+import { getMemories } from '@/services/memories';
+import type { DailyEvent, EventType, Milestone, Memory } from '@/lib/database.types';
 
 export interface EventDay {
   dateKey: string;                    // "2025-06-15"
@@ -19,6 +20,7 @@ export interface MonthSection {
   label: string;                      // "June 2025"
   ageLabel: string;                   // "6mo" | "1yr 2mo"
   milestones: Milestone[];
+  memories: Memory[];
   eventDays: EventDay[];
 }
 
@@ -35,6 +37,7 @@ function formatAge(dob: string, date: Date): string {
 function buildSections(
   milestones: Milestone[],
   events: DailyEvent[],
+  memories: Memory[],
   childDob: string,
 ): MonthSection[] {
   const sectionMap = new Map<string, MonthSection>();
@@ -46,6 +49,7 @@ function buildSections(
         label: format(date, 'MMMM yyyy'),
         ageLabel: formatAge(childDob, date),
         milestones: [],
+        memories: [],
         eventDays: [],
       });
     }
@@ -55,6 +59,11 @@ function buildSections(
   for (const m of milestones) {
     const date = parseISO(m.achieved_at);
     getOrCreate(format(date, 'yyyy-MM'), date).milestones.push(m);
+  }
+
+  for (const mem of memories) {
+    const date = parseISO(mem.occurred_at);
+    getOrCreate(format(date, 'yyyy-MM'), date).memories.push(mem);
   }
 
   // Group events by day first, then attach to month sections
@@ -108,7 +117,6 @@ function buildSections(
     const startDateKey = format(parseISO(e.occurred_at), 'yyyy-MM-dd');
     const endDateKey   = format(parseISO(sleepEnd),       'yyyy-MM-dd');
     if (endDateKey === startDateKey) continue;
-    // Ensure the wake-up day exists in the map (it may not if outside the query window)
     if (!dayMap.has(endDateKey)) {
       const wakeDate = parseISO(sleepEnd);
       const wakeMonthKey = format(wakeDate, 'yyyy-MM');
@@ -139,6 +147,9 @@ function buildSections(
     s.milestones.sort(
       (a, b) => parseISO(b.achieved_at).getTime() - parseISO(a.achieved_at).getTime(),
     );
+    s.memories.sort(
+      (a, b) => parseISO(b.occurred_at).getTime() - parseISO(a.occurred_at).getTime(),
+    );
     s.eventDays.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
     for (const d of s.eventDays) {
       d.events.sort(
@@ -161,11 +172,12 @@ export function useJourneyTimeline(childId: string | null, childDob: string | nu
     }
     setIsLoading(true);
     try {
-      const [milestones, events] = await Promise.all([
+      const [milestones, events, memories] = await Promise.all([
         getMilestones(childId),
         getRecentEvents(childId, 180),
+        getMemories(childId),
       ]);
-      setSections(buildSections(milestones, events, childDob));
+      setSections(buildSections(milestones, events, memories, childDob));
     } catch (e) {
       console.error('[useJourneyTimeline] fetch failed:', e);
     } finally {
