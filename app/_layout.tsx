@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DefaultTheme, DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, usePathname, useRouter } from 'expo-router';
@@ -10,9 +10,9 @@ import 'react-native-reanimated';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { supabase } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { getPendingInviteToken } from '@/lib/pending-invite';
-import { Colors } from '@/constants/theme';
+import { Colors, Fonts, Spacing } from '@/constants/theme';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -86,7 +86,24 @@ function useDeepLinkAuth() {
   }, [handleUrl]);
 }
 
+function ConfigErrorScreen() {
+  return (
+    <View style={configErrorStyles.container}>
+      <Text style={configErrorStyles.title}>App configuration missing</Text>
+      <Text style={configErrorStyles.body}>
+        This build was not packaged with Supabase credentials. Rebuild with EAS after setting
+        EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY on expo.dev for the preview
+        environment, then install the new Play Store internal test build.
+      </Text>
+    </View>
+  );
+}
+
 export default function RootLayout() {
+  if (!isSupabaseConfigured) {
+    return <ConfigErrorScreen />;
+  }
+
   const navigationTheme = useNavigationTheme();
   const colorScheme = useColorScheme();
   const { session, isLoading } = useAuth();
@@ -158,4 +175,24 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+});
+
+const configErrorStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: Spacing.xl,
+    backgroundColor: '#F0EBE3',
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: Fonts.serif,
+    marginBottom: Spacing.md,
+    color: '#2c2825',
+  },
+  body: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#5c554d',
+  },
 });

@@ -6,19 +6,13 @@
   "build": {
     "preview": {
       "distribution": "store",
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "@EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "@EXPO_PUBLIC_SUPABASE_ANON_KEY"
-      }
+      "environment": "preview",
+      "autoIncrement": true
     },
     "production": {
       "distribution": "store",
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "@EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "@EXPO_PUBLIC_SUPABASE_ANON_KEY"
-      }
+      "environment": "production",
+      "autoIncrement": true
     }
   },
   "submit": {

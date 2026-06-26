@@ -70,4 +70,5 @@ function upsertEnv(name: string, value: string) {
 console.log('\nCreating EAS env vars for preview + production builds...\n');
 upsertEnv('EXPO_PUBLIC_SUPABASE_URL', url);
 upsertEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY', anonKey);
-console.log('\nDone. Verify with: npx eas-cli env:list\n');
+console.log('\nDone. Verify on expo.dev → Project → Environment variables.');
+console.log('List via CLI: npx eas-cli env:list --environment preview\n');
