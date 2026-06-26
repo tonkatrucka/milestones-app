@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '@/lib/pick-image';
 import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
+import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { createMilestone } from '@/services/milestones';
 import { uploadMilestoneMedia } from '@/services/media';
@@ -50,6 +51,7 @@ export default function NewMilestoneScreen() {
   const { session } = useAuth();
   const { activeChild } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
+  const { isLoading: isRoleLoading } = useRequireCanWrite(activeChildId, session?.user.id ?? null);
 
   const [category, setCategory] = useState<MilestoneCategory>('development');
   const [title, setTitle] = useState('');
@@ -68,19 +70,13 @@ export default function NewMilestoneScreen() {
       Alert.alert('Limit reached', 'You can add up to 5 photos per milestone.');
       return;
     }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow Milestones to access your photos.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const uris = await pickImage({
       allowsMultipleSelection: true,
       selectionLimit: 5 - photos.length,
       quality: 0.8,
     });
-    if (!result.canceled) {
-      setPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 5));
+    if (uris) {
+      setPhotos((prev) => [...prev, ...uris].slice(0, 5));
     }
   };
 

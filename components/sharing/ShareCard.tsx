@@ -2,6 +2,11 @@ import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 import { format, differenceInMonths, differenceInYears } from 'date-fns';
 import { MilestoneColors, Fonts, Spacing, Radius } from '@/constants/theme';
+import {
+  PaletteAnchors,
+  PaletteNeutralsCool,
+  PaletteNeutralsWarm,
+} from '@/constants/reference-palette';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
 import type { Milestone, Child, MilestoneCategory } from '@/lib/database.types';
 
@@ -43,7 +48,7 @@ export function ShareCard({ milestone, child }: ShareCardProps) {
         <Image source={{ uri: firstPhoto }} style={styles.photo} contentFit="cover" />
       ) : null}
       <View style={styles.body}>
-        <Text style={[styles.title, { fontFamily: Fonts!.rounded, color: '#1C1C1E' }]}>
+        <Text style={[styles.title, { fontFamily: Fonts!.rounded, color: PaletteNeutralsCool.charcoal }]}>
           {milestone.title}
         </Text>
         {milestone.description ? (
@@ -63,12 +68,12 @@ export function ShareCard({ milestone, child }: ShareCardProps) {
 const styles = StyleSheet.create({
   card: {
     width: 340,
-    backgroundColor: '#FFFAF5',
+    backgroundColor: PaletteNeutralsWarm.warmCream,
     borderRadius: Radius.xl,
     overflow: 'hidden',
     borderWidth: 3,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: PaletteNeutralsCool.charcoal,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -83,12 +88,12 @@ const styles = StyleSheet.create({
     fontSize: 32,
   },
   headerCategory: {
-    color: '#fff',
+    color: PaletteNeutralsWarm.warmCream,
     fontWeight: '700',
     fontSize: 16,
   },
   headerApp: {
-    color: '#ffffff99',
+    color: PaletteNeutralsWarm.warmCream + '99',
     fontSize: 12,
   },
   photo: {
@@ -105,7 +110,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 15,
-    color: '#555',
+    color: PaletteNeutralsCool.slate,
     lineHeight: 22,
   },
   footer: {
@@ -118,6 +123,6 @@ const styles = StyleSheet.create({
   },
   ageDate: {
     fontSize: 13,
-    color: '#888',
+    color: PaletteNeutralsCool.stoneGrey,
   },
 });

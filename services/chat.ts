@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import type { ChatMessage } from '@/lib/database.types';
 
+export const MAX_CHAT_PHOTOS = 5;
+
 export function localDateString(date = new Date()): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -71,9 +73,21 @@ export async function saveChatMessage(
   content: string,
   mediaUrls: string[] = [],
 ): Promise<ChatMessage> {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) throw authError ?? new Error('Not signed in');
+
   const { data, error } = await supabase
     .from('chat_messages')
-    .insert({ child_id: childId, role, content, media_urls: mediaUrls })
+    .insert({
+      child_id: childId,
+      user_id: user.id,
+      role,
+      content,
+      media_urls: mediaUrls,
+    })
     .select()
     .single();
 

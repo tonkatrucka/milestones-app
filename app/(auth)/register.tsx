@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Link } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -87,6 +88,7 @@ export default function RegisterScreen() {
     const { error: err } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: { emailRedirectTo: Linking.createURL('/') },
     });
     setIsLoading(false);
     if (err) {

@@ -1,4 +1,4 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { format, parseISO } from 'date-fns';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
@@ -21,7 +21,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const isUser = message.role === 'user';
-  const photo = message.media_urls[0];
+  const photos = message.media_urls;
   const timestamp = formatMessageTime(message.created_at);
 
   return (
@@ -39,14 +39,29 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             ? [styles.bubbleUser, { backgroundColor: colors.primary }]
             : [styles.bubbleAssistant, { backgroundColor: colors.card }],
         ]}>
-        {photo ? (
-          <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" />
+        {photos.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.photoRow}
+            style={photos.length === 1 ? styles.photoScrollSingle : styles.photoScrollMulti}>
+            {photos.map((uri, index) => (
+              <Image
+                key={`${uri}-${index}`}
+                source={{ uri }}
+                style={photos.length === 1 ? styles.photoSingle : styles.photoThumb}
+                contentFit="cover"
+              />
+            ))}
+          </ScrollView>
         ) : null}
         <View style={styles.bubbleBody}>
           <Text
             style={[
               styles.text,
-              isUser ? styles.textUser : [styles.textAssistant, { color: colors.text }],
+              isUser
+                ? [styles.textUser, { color: colors.onPrimary }]
+                : [styles.textAssistant, { color: colors.text }],
             ]}>
             {message.content}
           </Text>
@@ -54,7 +69,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <Text
               style={[
                 styles.timestamp,
-                isUser ? styles.timestampUser : { color: colors.muted },
+                isUser
+                  ? [styles.timestampUser, { color: colors.onPrimary + 'BF' }]
+                  : { color: colors.muted },
               ]}>
               {timestamp}
             </Text>
@@ -122,9 +139,26 @@ const styles = StyleSheet.create({
   bubbleAssistant: {
     borderBottomLeftRadius: 4,
   },
-  photo: {
+  photoScrollSingle: {
+    maxWidth: '100%',
+  },
+  photoScrollMulti: {
+    maxWidth: '100%',
+  },
+  photoRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    padding: Spacing.xs,
+  },
+  photoSingle: {
     width: 220,
     height: 160,
+    borderRadius: Radius.md,
+  },
+  photoThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: Radius.md,
   },
   bubbleBody: {
     paddingHorizontal: Spacing.sm + 4,
@@ -137,9 +171,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Fonts?.sans,
   },
-  textUser: {
-    color: '#fff',
-  },
+  textUser: {},
   textAssistant: {},
   timestamp: {
     fontSize: 10,
@@ -147,9 +179,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: 2,
   },
-  timestampUser: {
-    color: 'rgba(255, 255, 255, 0.75)',
-  },
+  timestampUser: {},
   typingSpinner: {
     padding: Spacing.sm + 4,
   },

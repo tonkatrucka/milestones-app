@@ -1,0 +1,26 @@
+name: Research monthly hygiene
+
+on:
+  schedule:
+    # First Sunday of each month, 05:00 UTC
+    - cron: '0 5 1-7 * 0'
+  workflow_dispatch:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        offset: [0, 5, 10, 15, 20, 25, 30, 35, 40]
+    steps:
+      - name: Invoke research-refresh (hygiene)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -X POST "$SUPABASE_URL/functions/v1/research-refresh" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"mode\":\"hygiene\",\"offset\":${{ matrix.offset }},\"limit\":5}"

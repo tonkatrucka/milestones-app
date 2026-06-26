@@ -12,12 +12,14 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { parseCalendarDate } from '@/lib/calendar-date';
 import { useAuth } from '@/hooks/use-auth';
+import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { deleteMilestone, getMilestone, updateMilestone } from '@/services/milestones';
 import { uploadMilestoneMedia } from '@/services/media';
@@ -44,7 +46,7 @@ function parseDateInput(value: string): string | null {
 }
 
 function toDisplayDate(isoDate: string): string {
-  return format(parseISO(isoDate), 'dd/MM/yyyy');
+  return format(parseCalendarDate(isoDate), 'dd/MM/yyyy');
 }
 
 function isLocalUri(uri: string): boolean {
@@ -58,6 +60,7 @@ export default function MilestoneDetailScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const activeChildId = useAppStore((s) => s.activeChildId);
+  const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
 
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const [category, setCategory] = useState<MilestoneCategory>('development');
@@ -91,19 +94,13 @@ export default function MilestoneDetailScreen() {
       Alert.alert('Limit reached', 'You can add up to 5 photos per milestone.');
       return;
     }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow Milestones to access your photos.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const uris = await pickImage({
       allowsMultipleSelection: true,
       selectionLimit: 5 - photos.length,
       quality: 0.8,
     });
-    if (!result.canceled) {
-      setPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 5));
+    if (uris) {
+      setPhotos((prev) => [...prev, ...uris].slice(0, 5));
     }
   };
 
@@ -230,7 +227,8 @@ export default function MilestoneDetailScreen() {
                         styles.categoryChip,
                         { backgroundColor: isActive ? catAccent : catAccent + '22' },
                       ]}
-                      onPress={() => setCategory(cat)}>
+                      onPress={canWrite ? () => setCategory(cat) : undefined}
+                      disabled={!canWrite}>
                       <Text style={styles.categoryEmoji}>{CATEGORY_EMOJIS[cat]}</Text>
                       <Text style={[styles.categoryText, { color: isActive ? '#fff' : catAccent }]}>
                         {CATEGORY_LABELS[cat]}
@@ -247,6 +245,7 @@ export default function MilestoneDetailScreen() {
                 style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                 value={title}
                 onChangeText={setTitle}
+                editable={canWrite}
               />
             </View>
 
@@ -259,6 +258,7 @@ export default function MilestoneDetailScreen() {
                 keyboardType="numeric"
                 placeholder="DD/MM/YYYY"
                 placeholderTextColor={colors.muted}
+                editable={canWrite}
               />
             </View>
 
@@ -272,6 +272,7 @@ export default function MilestoneDetailScreen() {
                 numberOfLines={4}
                 placeholder="Tell the story..."
                 placeholderTextColor={colors.muted}
+                editable={canWrite}
               />
             </View>
 
@@ -281,14 +282,18 @@ export default function MilestoneDetailScreen() {
                 {photos.map((uri, i) => (
                   <Pressable
                     key={`${uri}-${i}`}
-                    onLongPress={() => {
-                      setPhotos((p) => p.filter((_, idx) => idx !== i));
-                      setActivePhoto(0);
-                    }}>
+                    onLongPress={
+                      canWrite
+                        ? () => {
+                            setPhotos((p) => p.filter((_, idx) => idx !== i));
+                            setActivePhoto(0);
+                          }
+                        : undefined
+                    }>
                     <Image source={{ uri }} style={styles.photoThumb} contentFit="cover" />
                   </Pressable>
                 ))}
-                {photos.length < 5 && (
+                {canWrite && photos.length < 5 && (
                   <Pressable
                     style={[styles.addPhotoButton, { backgroundColor: accent + '22' }]}
                     onPress={pickPhoto}>
@@ -296,33 +301,45 @@ export default function MilestoneDetailScreen() {
                   </Pressable>
                 )}
               </View>
-              <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
+              {canWrite && (
+                <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
       </ScrollView>
 
       <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        <Pressable
-          style={[styles.actionButton, { backgroundColor: accent }, isSaving && { opacity: 0.7 }]}
-          onPress={handleSave}
-          disabled={isSaving}>
-          {isSaving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.actionButtonText}>Save changes</Text>
-          )}
-        </Pressable>
-        <Pressable
-          style={[styles.actionButtonSecondary, { borderColor: accent }]}
-          onPress={handleShare}>
-          <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
-          onPress={handleDelete}>
-          <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
-        </Pressable>
+        {canWrite ? (
+          <>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: accent }, isSaving && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.actionButtonText}>Save changes</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: accent }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
+              onPress={handleDelete}>
+              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable
+            style={[styles.actionButtonSecondary, { borderColor: accent }]}
+            onPress={handleShare}>
+            <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );

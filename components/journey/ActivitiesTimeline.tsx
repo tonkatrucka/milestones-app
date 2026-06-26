@@ -11,56 +11,24 @@ import {
 } from 'react-native';
 import Animated, {
   Easing,
-  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { Image } from 'expo-image';
-import { differenceInMinutes, format, parse, parseISO } from 'date-fns';
-
-/**
- * Parse a date-only string ("2026-06-21") as local midnight.
- * Full ISO timestamps are passed through parseISO unchanged.
- */
-function parseDate(value: string): Date {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return parse(value, 'yyyy-MM-dd', new Date());
-  }
-  return parseISO(value);
-}
+import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
-import { Colors, EventColors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
-import { CATEGORY_EMOJIS } from '@/constants/milestone-templates';
+import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { MonthSection, EventDay } from '@/hooks/use-journey-timeline';
+import type { ActivitiesMonthSection, EventDay } from '@/lib/timeline-sections';
 import type {
   DailyEvent,
   EventType,
   MealMetadata,
-  Memory,
-  Milestone,
-  MilestoneCategory,
   NappyMetadata,
   SleepMetadata,
 } from '@/lib/database.types';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type FilterMode = 'all' | 'milestones' | 'memories' | 'activities';
-
-export interface TimelineProps {
-  sections: MonthSection[];
-  isLoading: boolean;
-  onRefresh: () => void;
-  onMilestonePress: (milestone: Milestone) => void;
-  onMemoryPress: (memory: Memory) => void;
-  onEventLongPress?: (event: DailyEvent) => void;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const SECTION_MAX_H = 4000;
 const DAY_DETAIL_MAX_H = 800;
@@ -71,13 +39,22 @@ const EVENT_EMOJIS: Record<EventType, string> = {
   sleep: '😴',
 };
 
-// ─── Timeline root ────────────────────────────────────────────────────────────
+export interface ActivitiesTimelineProps {
+  sections: ActivitiesMonthSection[];
+  isLoading: boolean;
+  onRefresh: () => void;
+  onEventLongPress?: (event: DailyEvent) => void;
+}
 
-export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onMemoryPress, onEventLongPress }: TimelineProps) {
+export function ActivitiesTimeline({
+  sections,
+  isLoading,
+  onRefresh,
+  onEventLongPress,
+}: ActivitiesTimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const tabBarHeight = useBottomTabBarHeight();
-  const [filter, setFilter] = useState<FilterMode>('all');
 
   return (
     <ScrollView
@@ -86,17 +63,11 @@ export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onM
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
       }>
-      <FilterTabs filter={filter} onChange={setFilter} colors={colors} />
-
       {sections.map((section, idx) => (
         <CollapsibleSection
           key={section.monthKey}
           section={section}
-          filter={filter}
-          // Keep the two most recent months open, collapse older ones
           initiallyCollapsed={idx >= 2}
-          onMilestonePress={onMilestonePress}
-          onMemoryPress={onMemoryPress}
           onEventLongPress={onEventLongPress}
           colors={colors}
         />
@@ -104,10 +75,10 @@ export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onM
 
       {sections.length === 0 && !isLoading && (
         <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyEmoji]}>🗺️</Text>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>The journey begins here</Text>
+          <Text style={styles.emptyEmoji}>📋</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No activities yet</Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Log daily events and add milestones to build your timeline.
+            Log daily events from Home or the Assistant.
           </Text>
         </View>
       )}
@@ -115,62 +86,14 @@ export function Timeline({ sections, isLoading, onRefresh, onMilestonePress, onM
   );
 }
 
-// ─── Filter Tabs ──────────────────────────────────────────────────────────────
-
-function FilterTabs({
-  filter,
-  onChange,
-  colors,
-}: {
-  filter: FilterMode;
-  onChange: (f: FilterMode) => void;
-  colors: typeof Colors.light;
-}) {
-  const TABS: { key: FilterMode; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'milestones', label: '⭐ Milestones' },
-    { key: 'memories', label: '📸 Memories' },
-    { key: 'activities', label: '📋 Activities' },
-  ];
-
-  return (
-    <View style={[styles.filterBar, { borderBottomColor: colors.border }]}>
-      {TABS.map((tab) => {
-        const active = filter === tab.key;
-        return (
-          <Pressable
-            key={tab.key}
-            style={[
-              styles.filterTab,
-              active && { borderBottomColor: colors.primary },
-            ]}
-            onPress={() => onChange(tab.key)}>
-            <Text style={[styles.filterTabText, { color: active ? colors.primary : colors.muted }]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-// ─── Collapsible Month Section ────────────────────────────────────────────────
-
 function CollapsibleSection({
   section,
-  filter,
   initiallyCollapsed,
-  onMilestonePress,
-  onMemoryPress,
   onEventLongPress,
   colors,
 }: {
-  section: MonthSection;
-  filter: FilterMode;
+  section: ActivitiesMonthSection;
   initiallyCollapsed: boolean;
-  onMilestonePress: (m: Milestone) => void;
-  onMemoryPress: (m: Memory) => void;
   onEventLongPress?: (event: DailyEvent) => void;
   colors: typeof Colors.light;
 }) {
@@ -197,61 +120,22 @@ function CollapsibleSection({
     transform: [{ rotate: `${chevronRot.value}deg` }],
   }));
 
-  const showMilestones = filter !== 'activities' && filter !== 'memories';
-  const showMemories = filter !== 'activities' && filter !== 'milestones';
-  const showActivities = filter !== 'milestones' && filter !== 'memories';
-  const visibleMilestones = showMilestones ? section.milestones : [];
-  const visibleMemories = showMemories ? section.memories : [];
-  const visibleDays = showActivities ? section.eventDays : [];
-  const hasContent = visibleMilestones.length > 0 || visibleMemories.length > 0 || visibleDays.length > 0;
+  const visibleDays = section.eventDays.filter((d) => d.events.length > 0);
+  if (visibleDays.length === 0) return null;
 
-  if (!hasContent) return null;
-
-  // ── Average daily stats for header badges ─────────────────────────────
-  const daysCount = section.eventDays.length;
+  const daysWithEvents = visibleDays;
+  const daysCount = daysWithEvents.length;
   const fmtAvg = (n: number) => (Number.isInteger(n) ? `${n}` : n.toFixed(1));
-  const avgNappy   = daysCount > 0 ? section.eventDays.reduce((s, d) => s + d.counts.nappy, 0) / daysCount : 0;
-  const avgMl      = daysCount > 0 ? section.eventDays.reduce((s, d) => s + d.totalMl, 0) / daysCount : 0;
-  const avgSleepH  = daysCount > 0 ? section.eventDays.reduce((s, d) => s + d.totalSleepMins, 0) / daysCount / 60 : 0;
-
-  // ── Merge milestones + memories + event-days into a single date-sorted list ──
-  type TimelineEntry =
-    | { kind: 'milestone'; data: Milestone }
-    | { kind: 'memory'; data: Memory }
-    | { kind: 'day'; data: EventDay };
-  const entries: TimelineEntry[] = [
-    ...visibleMilestones.map((m) => ({ kind: 'milestone' as const, data: m })),
-    ...visibleMemories.map((m) => ({ kind: 'memory' as const, data: m })),
-    ...visibleDays.map((d) => ({ kind: 'day' as const, data: d })),
-  ];
-  // Derive the local calendar date consistently for sorting so that a stored
-  // value of "2026-06-20T14:00:00Z" (June 21 midnight AEST) sorts the same
-  // way it is displayed (21 Jun), not as the raw UTC date (20 Jun).
-  const localDateKey = (v: string) => format(parseDate(v), 'yyyy-MM-dd');
-
-  entries.sort((a, b) => {
-    const dateA =
-      a.kind === 'milestone' ? localDateKey(a.data.achieved_at) :
-      a.kind === 'memory'    ? localDateKey(a.data.occurred_at) :
-      a.data.dateKey;
-    const dateB =
-      b.kind === 'milestone' ? localDateKey(b.data.achieved_at) :
-      b.kind === 'memory'    ? localDateKey(b.data.occurred_at) :
-      b.data.dateKey;
-    if (dateA !== dateB) return dateB.localeCompare(dateA);
-    // Same date ordering: milestone > memory > day
-    const rank = (e: TimelineEntry) => e.kind === 'milestone' ? 0 : e.kind === 'memory' ? 1 : 2;
-    return rank(a) - rank(b);
-  });
+  const avgNappy = daysCount > 0 ? daysWithEvents.reduce((s, d) => s + d.counts.nappy, 0) / daysCount : 0;
+  const avgMl = daysCount > 0 ? daysWithEvents.reduce((s, d) => s + d.totalMl, 0) / daysCount : 0;
+  const avgSleepH =
+    daysCount > 0 ? daysWithEvents.reduce((s, d) => s + d.totalSleepMins, 0) / daysCount / 60 : 0;
 
   return (
     <View style={styles.sectionWrapper}>
-      {/* ── Month header ── */}
       <Pressable
         style={[styles.sectionHeader, { backgroundColor: colors.card }]}
         onPress={toggle}>
-
-        {/* Row 1: date + age pill + chevron */}
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionMonth, { color: colors.text, fontFamily: Fonts!.rounded }]}>
             {section.label}
@@ -265,22 +149,7 @@ function CollapsibleSection({
           </View>
         </View>
 
-        {/* Row 2: stat badges — wrap freely without competing with the title */}
         <View style={styles.sectionBadgeRow}>
-          {section.milestones.length > 0 && (
-            <View style={[styles.countBadge, { backgroundColor: '#F4A26122' }]}>
-              <Text style={[styles.countBadgeText, { color: '#F4A261' }]} numberOfLines={1}>
-                {`⭐ ${section.milestones.length}`}
-              </Text>
-            </View>
-          )}
-          {section.memories.length > 0 && (
-            <View style={[styles.countBadge, { backgroundColor: MemoryColor + '22' }]}>
-              <Text style={[styles.countBadgeText, { color: MemoryColor }]} numberOfLines={1}>
-                {`📸 ${section.memories.length}`}
-              </Text>
-            </View>
-          )}
           {avgNappy > 0 && (
             <View style={[styles.countBadge, { backgroundColor: EventColors.nappy + '22' }]}>
               <Text style={[styles.countBadgeText, { color: EventColors.nappy }]} numberOfLines={1}>
@@ -305,141 +174,21 @@ function CollapsibleSection({
         </View>
       </Pressable>
 
-      {/* ── Content: milestones interleaved with event-day rows by date ── */}
       <Animated.View style={contentStyle}>
         <View style={[styles.sectionContent, { borderLeftColor: colors.border }]}>
-          {entries.map((entry) =>
-            entry.kind === 'milestone' ? (
-              <MilestoneCard
-                key={entry.data.id}
-                milestone={entry.data}
-                onPress={() => onMilestonePress(entry.data as Milestone)}
-                colors={colors}
-              />
-            ) : entry.kind === 'memory' ? (
-              <MemoryCard
-                key={entry.data.id}
-                memory={entry.data as Memory}
-                colors={colors}
-                onPress={() => onMemoryPress(entry.data as Memory)}
-              />
-            ) : (
-              <EventDayRow
-                key={(entry.data as EventDay).dateKey}
-                day={entry.data as EventDay}
-                colors={colors}
-                onEventLongPress={onEventLongPress}
-              />
-            ),
-          )}
+          {visibleDays.map((day) => (
+            <EventDayRow
+              key={day.dateKey}
+              day={day}
+              colors={colors}
+              onEventLongPress={onEventLongPress}
+            />
+          ))}
         </View>
       </Animated.View>
     </View>
   );
 }
-
-// ─── Milestone Card ───────────────────────────────────────────────────────────
-
-function MilestoneCard({
-  milestone,
-  onPress,
-  colors,
-}: {
-  milestone: Milestone;
-  onPress: () => void;
-  colors: typeof Colors.light;
-}) {
-  const accent = MilestoneColors[milestone.category as MilestoneCategory];
-  const emoji = CATEGORY_EMOJIS[milestone.category as MilestoneCategory];
-  const photo = milestone.media_urls[0];
-
-  return (
-    <Animated.View entering={FadeInDown.duration(280).springify()}>
-      <Pressable
-        style={[styles.milestoneCard, { backgroundColor: colors.card, borderLeftColor: accent }]}
-        onPress={onPress}>
-        {photo ? (
-          <Image source={{ uri: photo }} style={styles.milestonePhoto} contentFit="cover" />
-        ) : null}
-        <View style={styles.milestoneBody}>
-          <View style={styles.milestoneTopRow}>
-            <View style={[styles.categoryPill, { backgroundColor: accent + '22' }]}>
-              <Text style={[styles.categoryText, { color: accent }]}>
-                {emoji} {milestone.category}
-              </Text>
-            </View>
-            <Text style={[styles.milestoneDate, { color: colors.muted }]}>
-              {format(parseDate(milestone.achieved_at), 'd MMM')}
-            </Text>
-          </View>
-          <Text style={[styles.milestoneTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            {milestone.title}
-          </Text>
-          {milestone.description ? (
-            <Text style={[styles.milestoneDesc, { color: colors.muted }]} numberOfLines={2}>
-              {milestone.description}
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-// ─── Memory Card ─────────────────────────────────────────────────────────────
-
-function MemoryCard({
-  memory,
-  colors,
-  onPress,
-}: {
-  memory: Memory;
-  colors: typeof Colors.light;
-  onPress: () => void;
-}) {
-  const photo = memory.media_urls[0];
-
-  return (
-    <Animated.View entering={FadeInDown.duration(280).springify()}>
-      <Pressable
-        style={[styles.memoryCard, { backgroundColor: colors.card, borderLeftColor: MemoryColor }]}
-        onPress={onPress}>
-        {photo ? (
-          <Image source={{ uri: photo }} style={styles.memoryPhoto} contentFit="cover" />
-        ) : null}
-        <View style={styles.memoryBody}>
-          <View style={styles.memoryTopRow}>
-            <View style={[styles.categoryPill, { backgroundColor: MemoryColor + '22' }]}>
-              <Text style={[styles.categoryText, { color: MemoryColor }]}>📸 Memory</Text>
-            </View>
-            <Text style={[styles.milestoneDate, { color: colors.muted }]}>
-              {format(parseDate(memory.occurred_at), 'd MMM')}
-            </Text>
-          </View>
-          <Text style={[styles.milestoneTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            {memory.title}
-          </Text>
-          {memory.description ? (
-            <Text style={[styles.milestoneDesc, { color: colors.muted }]} numberOfLines={2}>
-              {memory.description}
-            </Text>
-          ) : null}
-          {memory.tags.length > 0 ? (
-            <View style={styles.tagRow}>
-              {memory.tags.slice(0, 4).map((tag) => (
-                <View key={tag} style={[styles.tagPill, { backgroundColor: MemoryColor + '15' }]}>
-                  <Text style={[styles.tagText, { color: MemoryColor }]}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-// ─── Event Day Row ────────────────────────────────────────────────────────────
 
 interface TooltipState {
   type: EventType;
@@ -458,15 +207,15 @@ function EventDayRow({
   colors: typeof Colors.light;
   onEventLongPress?: (event: DailyEvent) => void;
 }) {
+  const hasDetailContent = day.events.length > 0 || day.wakeUps.length > 0;
   const [expanded, setExpanded] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const detailH = useSharedValue(0);
 
-  // One ref per chip type so we can measure their on-screen position
   const nappyRef = useRef<View>(null);
-  const mealRef  = useRef<View>(null);
+  const mealRef = useRef<View>(null);
   const sleepRef = useRef<View>(null);
-  const mlRef    = useRef<View>(null);
+  const mlRef = useRef<View>(null);
   const sleepStatRef = useRef<View>(null);
 
   const toggleDetail = useCallback(() => {
@@ -483,26 +232,21 @@ function EventDayRow({
     overflow: 'hidden',
   }));
 
-  const openTooltip = useCallback(
-    (type: EventType, ref: React.RefObject<View | null>) => {
-      ref.current?.measure((_x, _y, width, height, pageX, pageY) => {
-        setTooltip({ type, pageX, pageY, width, height });
-      });
-    },
-    [],
-  );
+  const openTooltip = useCallback((type: EventType, ref: React.RefObject<View | null>) => {
+    ref.current?.measure((_x, _y, width, height, pageX, pageY) => {
+      setTooltip({ type, pageX, pageY, width, height });
+    });
+  }, []);
 
-  // Pre-group events by type so tooltip content doesn't re-filter on every render
   const eventsByType = useMemo(
     () => ({
       nappy: day.events.filter((e) => e.type === 'nappy'),
-      meal:  day.events.filter((e) => e.type === 'meal'),
+      meal: day.events.filter((e) => e.type === 'meal'),
       sleep: day.events.filter((e) => e.type === 'sleep'),
     }),
     [day.events],
   );
 
-  // Merge real events with synthetic wake-up rows; sort ascending (morning first)
   type DetailItem = { kind: 'event'; event: DailyEvent } | { kind: 'wakeup'; time: string };
   const detailItems = useMemo<DetailItem[]>(() => {
     const items: DetailItem[] = [
@@ -512,7 +256,7 @@ function EventDayRow({
     items.sort((a, b) => {
       const tA = a.kind === 'event' ? a.event.occurred_at : a.time;
       const tB = b.kind === 'event' ? b.event.occurred_at : b.time;
-      return tA.localeCompare(tB); // ascending: oldest (morning) first
+      return tA.localeCompare(tB);
     });
     return items;
   }, [day.events, day.wakeUps]);
@@ -524,65 +268,69 @@ function EventDayRow({
 
   return (
     <View style={[styles.dayBlock, { borderTopColor: colors.border }]}>
-      <Pressable style={styles.dayRow} onPress={toggleDetail}>
+      <Pressable style={styles.dayRow} onPress={toggleDetail} disabled={!hasDetailContent}>
         <Text style={[styles.dayLabel, { color: colors.text }]}>{day.label}</Text>
 
         <View style={styles.dayCountsRow}>
-          {/* ── Nappy chip ── */}
           {day.counts.nappy > 0 && (
             <Pressable
               ref={nappyRef}
               style={styles.dayCountChip}
-              onPress={(e) => { e.stopPropagation(); openTooltip('nappy', nappyRef); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                openTooltip('nappy', nappyRef);
+              }}
               hitSlop={6}>
               <Text style={styles.dayCountEmoji}>{EVENT_EMOJIS.nappy}</Text>
               <Text style={[styles.dayCountNum, { color: colors.muted }]}>{day.counts.nappy}</Text>
             </Pressable>
           )}
-
-          {/* ── Meal chip ── */}
           {day.counts.meal > 0 && (
             <Pressable
               ref={mealRef}
               style={styles.dayCountChip}
-              onPress={(e) => { e.stopPropagation(); openTooltip('meal', mealRef); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                openTooltip('meal', mealRef);
+              }}
               hitSlop={6}>
               <Text style={styles.dayCountEmoji}>{EVENT_EMOJIS.meal}</Text>
               <Text style={[styles.dayCountNum, { color: colors.muted }]}>{day.counts.meal}</Text>
             </Pressable>
           )}
-
-          {/* ── ml stat pill (press → meal tooltip) ── */}
           {day.totalMl > 0 && (
             <Pressable
               ref={mlRef}
               style={[styles.statChip, { backgroundColor: EventColors.meal + '18' }]}
-              onPress={(e) => { e.stopPropagation(); openTooltip('meal', mlRef); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                openTooltip('meal', mlRef);
+              }}
               hitSlop={6}>
-              <Text style={[styles.statChipText, { color: EventColors.meal }]}>
-                {day.totalMl}ml
-              </Text>
+              <Text style={[styles.statChipText, { color: EventColors.meal }]}>{day.totalMl}ml</Text>
             </Pressable>
           )}
-
-          {/* ── Sleep chip ── */}
           {day.counts.sleep > 0 && (
             <Pressable
               ref={sleepRef}
               style={styles.dayCountChip}
-              onPress={(e) => { e.stopPropagation(); openTooltip('sleep', sleepRef); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                openTooltip('sleep', sleepRef);
+              }}
               hitSlop={6}>
               <Text style={styles.dayCountEmoji}>{EVENT_EMOJIS.sleep}</Text>
               <Text style={[styles.dayCountNum, { color: colors.muted }]}>{day.counts.sleep}</Text>
             </Pressable>
           )}
-
-          {/* ── sleep stat pill (press → sleep tooltip) ── */}
           {day.totalSleepMins > 0 && (
             <Pressable
               ref={sleepStatRef}
               style={[styles.statChip, { backgroundColor: EventColors.sleep + '18' }]}
-              onPress={(e) => { e.stopPropagation(); openTooltip('sleep', sleepStatRef); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                openTooltip('sleep', sleepStatRef);
+              }}
               hitSlop={6}>
               <Text style={[styles.statChipText, { color: EventColors.sleep }]}>{sleepLabel}</Text>
             </Pressable>
@@ -593,10 +341,10 @@ function EventDayRow({
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={14}
           color={colors.muted}
+          style={!hasDetailContent ? { opacity: 0.35 } : undefined}
         />
       </Pressable>
 
-      {/* ── Expanded per-event detail ── */}
       <Animated.View style={detailStyle}>
         <View style={styles.dayDetails}>
           {detailItems.map((item) =>
@@ -614,7 +362,6 @@ function EventDayRow({
         </View>
       </Animated.View>
 
-      {/* ── Floating tooltip ── */}
       {tooltip && (
         <EventTooltip
           type={tooltip.type}
@@ -627,8 +374,6 @@ function EventDayRow({
     </View>
   );
 }
-
-// ─── Event Detail Row ─────────────────────────────────────────────────────────
 
 function formatEventDetail(event: DailyEvent): string {
   const meta = event.metadata as Record<string, unknown>;
@@ -670,11 +415,10 @@ function formatEventDetail(event: DailyEvent): string {
         const mins = Math.max(0, differenceInMinutes(parseISO(m.sleepEnd), parseISO(event.occurred_at)));
         return `😴 ${fmtMins(mins)}`;
       }
-      // No sleepEnd — only "Ongoing" if it started today
       const todayKey = format(new Date(), 'yyyy-MM-dd');
-      const startKey = format(parseDate(event.occurred_at), 'yyyy-MM-dd');
+      const startKey = format(parseISO(event.occurred_at), 'yyyy-MM-dd');
       if (startKey === todayKey) {
-        const mins = differenceInMinutes(new Date(), parseDate(event.occurred_at));
+        const mins = differenceInMinutes(new Date(), parseISO(event.occurred_at));
         return mins > 0 ? `😴 ${fmtMins(mins)}` : '😴 Ongoing';
       }
       return '😴 —';
@@ -735,20 +479,18 @@ function WakeUpRow({ time, colors }: { time: string; colors: typeof Colors.light
   );
 }
 
-// ─── Floating Tooltip ────────────────────────────────────────────────────────
-
 const MEAL_TYPE_LABELS: Record<string, string> = {
   breast: '🤱 Breastfed',
   bottle: '🍼 Bottle',
-  solid:  '🥣 Solids',
-  snack:  '🍪 Snack',
+  solid: '🥣 Solids',
+  snack: '🍪 Snack',
 };
 
 const NAPPY_TYPE_LABELS: Record<string, string> = {
-  wet:   '💧 Wet',
+  wet: '💧 Wet',
   dirty: '🧷 Dirty',
-  both:  '🧷 Both',
-  dry:   '✓  Dry',
+  both: '🧷 Both',
+  dry: '✓  Dry',
 };
 
 function EventTooltip({
@@ -767,12 +509,8 @@ function EventTooltip({
   const { width: SW, height: SH } = Dimensions.get('window');
   const CARD_W = Math.min(SW - 48, 296);
   const accent = EventColors[type];
-
-  // Position above the chip if it sits in the lower 55% of the screen,
-  // otherwise below it.
   const chipMidY = position.pageY + position.height / 2;
   const showAbove = chipMidY > SH * 0.45;
-
   const left = Math.min(
     Math.max(16, position.pageX + position.width / 2 - CARD_W / 2),
     SW - CARD_W - 16,
@@ -783,33 +521,25 @@ function EventTooltip({
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onDismiss}>
-      {/* Full-screen tap-to-dismiss layer */}
       <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
-        {/* Card — inner Pressable absorbs taps so the card itself doesn't dismiss */}
         <Pressable
           style={[
             styles.tooltipCard,
             { backgroundColor: colors.card, width: CARD_W, ...cardPosition },
           ]}
-          onPress={() => { /* intentionally empty – stops propagation to backdrop */ }}>
-
-          {/* Header row */}
+          onPress={() => {}}>
           <View style={[styles.tooltipHeader, { borderBottomColor: colors.border }]}>
             <View style={[styles.tooltipAccentDot, { backgroundColor: accent }]} />
             <Text style={[styles.tooltipTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-              {type === 'nappy' ? 'Nappy breakdown'
-               : type === 'meal' ? 'Meals'
-               : 'Sleep sessions'}
+              {type === 'nappy' ? 'Nappy breakdown' : type === 'meal' ? 'Meals' : 'Sleep sessions'}
             </Text>
             <Pressable onPress={onDismiss} hitSlop={8}>
               <Ionicons name="close" size={16} color={colors.muted} />
             </Pressable>
           </View>
-
-          {/* Body */}
           <View style={styles.tooltipBody}>
             {type === 'nappy' && <NappyTooltipBody events={events} colors={colors} />}
-            {type === 'meal'  && <MealTooltipBody  events={events} colors={colors} />}
+            {type === 'meal' && <MealTooltipBody events={events} colors={colors} />}
             {type === 'sleep' && <SleepTooltipBody events={events} colors={colors} />}
           </View>
         </Pressable>
@@ -818,24 +548,18 @@ function EventTooltip({
   );
 }
 
-// ── Nappy breakdown ──────────────────────────────────────────────────────────
-
 function NappyTooltipBody({ events, colors }: { events: DailyEvent[]; colors: typeof Colors.light }) {
-  // Tally counts per type
   const counts: Record<string, number> = {};
   for (const e of events) {
     const t = (e.metadata as NappyMetadata)?.nappyType ?? 'unknown';
     counts[t] = (counts[t] ?? 0) + 1;
   }
-
   const rows = Object.entries(NAPPY_TYPE_LABELS)
     .map(([key, label]) => ({ key, label, n: counts[key] ?? 0 }))
     .filter((r) => r.n > 0);
-
   if (rows.length === 0) {
     return <Text style={[styles.tooltipEmpty, { color: colors.muted }]}>No details available</Text>;
   }
-
   return (
     <>
       {rows.map((r) => (
@@ -856,28 +580,20 @@ function NappyTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
   );
 }
 
-// ── Meal breakdown ───────────────────────────────────────────────────────────
-
 function MealTooltipBody({ events, colors }: { events: DailyEvent[]; colors: typeof Colors.light }) {
   if (events.length === 0) {
     return <Text style={[styles.tooltipEmpty, { color: colors.muted }]}>No meals recorded</Text>;
   }
-
   const totalMl = events.reduce((sum, e) => {
     const ml = (e.metadata as MealMetadata)?.amountMl;
     return sum + (typeof ml === 'number' ? ml : 0);
   }, 0);
-
   return (
     <>
       {events.map((e, idx) => {
         const meta = e.metadata as MealMetadata;
         const label = MEAL_TYPE_LABELS[meta?.mealType] ?? '🍼 Meal';
-        const detail = meta?.amountMl
-          ? `${meta.amountMl}ml`
-          : meta?.food
-          ? meta.food
-          : null;
+        const detail = meta?.amountMl ? `${meta.amountMl}ml` : meta?.food ? meta.food : null;
         const isLast = idx === events.length - 1;
         return (
           <View
@@ -909,22 +625,17 @@ function MealTooltipBody({ events, colors }: { events: DailyEvent[]; colors: typ
   );
 }
 
-// ── Sleep breakdown ──────────────────────────────────────────────────────────
-
 function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: typeof Colors.light }) {
   if (events.length === 0) {
     return <Text style={[styles.tooltipEmpty, { color: colors.muted }]}>No sleep recorded</Text>;
   }
-
   let totalMins = 0;
-
   return (
     <>
       {events.map((e, idx) => {
         const meta = e.metadata as SleepMetadata;
         const startStr = format(parseISO(e.occurred_at), 'h:mm a');
         const isLast = idx === events.length - 1;
-
         const fmtDur = (mins: number) => {
           if (mins >= 60) {
             const h = Math.floor(mins / 60);
@@ -933,12 +644,11 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
           }
           return `${mins}m`;
         };
-
         if (!meta?.sleepEnd) {
           const todayKey = format(new Date(), 'yyyy-MM-dd');
-          const startKey = format(parseDate(e.occurred_at), 'yyyy-MM-dd');
+          const startKey = format(parseISO(e.occurred_at), 'yyyy-MM-dd');
           const isOngoing = startKey === todayKey;
-          const elapsedMins = differenceInMinutes(new Date(), parseDate(e.occurred_at));
+          const elapsedMins = differenceInMinutes(new Date(), parseISO(e.occurred_at));
           return (
             <View
               key={e.id}
@@ -960,7 +670,6 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
             </View>
           );
         }
-
         const endStr = format(parseISO(meta.sleepEnd), 'h:mm a');
         const mins = Math.max(0, differenceInMinutes(parseISO(meta.sleepEnd), parseISO(e.occurred_at)));
         totalMins += mins;
@@ -968,7 +677,6 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
           mins >= 60
             ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`
             : `${mins}m`;
-
         return (
           <View
             key={e.id}
@@ -1000,29 +708,7 @@ function SleepTooltipBody({ events, colors }: { events: DailyEvent[]; colors: ty
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  // Filter bar
-  filterBar: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  filterTab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  filterTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  // Section
   sectionWrapper: {
     marginHorizontal: Spacing.md,
     marginBottom: Spacing.md,
@@ -1040,132 +726,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
-  sectionHeaderSpacer: {
-    flex: 1,
-  },
+  sectionHeaderSpacer: { flex: 1 },
   sectionBadgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
   },
-  sectionMonth: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  sectionMonth: { fontSize: 15, fontWeight: '700' },
   agePill: {
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
   },
-  ageLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  ageLabel: { fontSize: 11, fontWeight: '700' },
   countBadge: {
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     flexShrink: 0,
   },
-  countBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    flexShrink: 0,
-  },
+  countBadgeText: { fontSize: 11, fontWeight: '700', flexShrink: 0 },
   sectionContent: {
     borderLeftWidth: 2,
     marginLeft: Spacing.md,
     paddingLeft: Spacing.md,
     paddingTop: Spacing.xs,
     paddingBottom: Spacing.sm,
-  },
-
-  // Milestone card
-  milestoneCard: {
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.sm,
-    overflow: 'hidden',
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-  },
-  milestonePhoto: {
-    width: '100%',
-    height: 140,
-  },
-  milestoneBody: {
-    padding: Spacing.md,
-    gap: Spacing.xs,
-  },
-  milestoneTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  categoryPill: {
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-  },
-  categoryText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  milestoneDate: {
-    fontSize: 12,
-  },
-  milestoneTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  milestoneDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-
-  // Memory card
-  memoryCard: {
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.sm,
-    overflow: 'hidden',
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-  },
-  memoryPhoto: {
-    width: '100%',
-    height: 120,
-  },
-  memoryBody: {
-    padding: Spacing.md,
-    gap: Spacing.xs,
-  },
-  memoryTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
-    marginTop: 2,
-  },
-  tagPill: {
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   dayBlock: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1178,44 +764,22 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     gap: Spacing.sm,
   },
-  dayLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    width: 88,
-  },
-  dayCountsRow: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  dayCountChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  dayCountEmoji: {
-    fontSize: 14,
-  },
-  dayCountNum: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  dayLabel: { fontSize: 13, fontWeight: '600', width: 88 },
+  dayCountsRow: { flex: 1, flexDirection: 'row', gap: Spacing.sm },
+  dayCountChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dayCountEmoji: { fontSize: 14 },
+  dayCountNum: { fontSize: 12, fontWeight: '600' },
   statChip: {
     borderRadius: Radius.full,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  statChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  statChipText: { fontSize: 11, fontWeight: '700' },
   dayDetails: {
     paddingTop: Spacing.xs,
     paddingBottom: Spacing.sm,
     gap: Spacing.xs,
   },
-
-  // Event detail
   eventDetailRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -1224,53 +788,20 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     marginLeft: Spacing.xs,
   },
-  eventDetailTime: {
-    fontSize: 11,
-    fontWeight: '500',
-    width: 60,
-    paddingTop: 2,
-  },
-  eventDetailBody: {
-    flex: 1,
-    gap: 2,
-  },
-  eventDetailLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  eventDetailNotes: {
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  eventDetailMenu: {
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Empty state
+  eventDetailTime: { fontSize: 11, fontWeight: '500', width: 60, paddingTop: 2 },
+  eventDetailBody: { flex: 1, gap: 2 },
+  eventDetailLabel: { fontSize: 13, fontWeight: '500' },
+  eventDetailNotes: { fontSize: 12, fontStyle: 'italic' },
+  eventDetailMenu: { padding: 4, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: {
     alignItems: 'center',
     paddingTop: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     gap: Spacing.sm,
   },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: Spacing.sm,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
-  // ── Tooltip ──────────────────────────────────────────────────────────────
+  emptyEmoji: { fontSize: 48, marginBottom: Spacing.sm },
+  emptyTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   tooltipCard: {
     position: 'absolute',
     borderRadius: Radius.lg,
@@ -1289,16 +820,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  tooltipAccentDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  tooltipTitle: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  tooltipAccentDot: { width: 8, height: 8, borderRadius: 4 },
+  tooltipTitle: { flex: 1, fontSize: 14, fontWeight: '700' },
   tooltipBody: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.xs,
@@ -1311,25 +834,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: Spacing.sm,
   },
-  tooltipRowTime: {
-    fontSize: 12,
-    fontWeight: '500',
-    width: 76,
-  },
-  tooltipRowLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  tooltipRowTime: { fontSize: 12, fontWeight: '500', width: 76 },
+  tooltipRowLabel: { fontSize: 13, fontWeight: '500' },
   tooltipCountBadge: {
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     marginLeft: 'auto',
   },
-  tooltipCountText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  tooltipCountText: { fontSize: 12, fontWeight: '700' },
   tooltipTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1343,13 +856,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  tooltipTotalValue: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  tooltipEmpty: {
-    fontSize: 13,
-    paddingVertical: Spacing.sm,
-    textAlign: 'center',
-  },
+  tooltipTotalValue: { fontSize: 13, fontWeight: '800' },
+  tooltipEmpty: { fontSize: 13, paddingVertical: Spacing.sm, textAlign: 'center' },
 });

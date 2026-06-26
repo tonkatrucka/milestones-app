@@ -10,6 +10,7 @@ Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activ
 - **Memories** — chronological photo memories with tags
 - **Journey** — unified timeline of milestones and memories with correct sleep duration display
 - **Milestones** — editable milestone records with photos and share cards
+- **Insights** — daily AI observations (one Haiku call per child per day) plus research dot-points from a pre-generated bank with regional preference and novelty rotation
 
 ## Get started
 
@@ -21,16 +22,32 @@ Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activ
 
 2. Configure environment — create `.env` with your Supabase project URL and anon key (see `.env.example` if present).
 
-3. Run database migrations — apply migrations in `supabase/migrations/` in order (especially `003_memories_and_chat.sql` and `004_chat_media_storage.sql`) in the Supabase SQL editor (or via `supabase db push`).
+3. Run database migrations — apply migrations in `supabase/migrations/` in order (through `010_insights_and_research.sql` and `011_seed_research_minimal.sql`) in the Supabase SQL editor (or via `supabase db push`).
 
-4. Deploy the chat edge function
+4. Deploy edge functions
 
    ```bash
-   npx supabase functions deploy chat
+   npx supabase functions deploy chat insights research-refresh
    npx supabase secrets set ANTHROPIC_API_KEY=your_key_here
+   # Optional cron auth for research-refresh:
+   npx supabase secrets set CRON_SECRET=your_cron_secret
    ```
 
-5. Start the app
+5. Bootstrap research bank — **one time only** (optional for production; dev seed has 12 bullets)
+
+   **Automated (recommended):** GitHub → Actions → **Research one-time bootstrap** → Run workflow  
+   (needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` repo secrets; ~2–4 hours)
+
+   **Or locally once:**
+
+   ```bash
+   npx supabase functions deploy research-refresh
+   npm run bootstrap:research -- --all
+   ```
+
+   After bootstrap completes, **ongoing maintenance is automatic** — weekly append and monthly hygiene run via GitHub Actions. You do not need to run the script again unless you reset the database.
+
+6. Start the app
 
    ```bash
    npm run start
@@ -81,6 +98,37 @@ The assistant is designed to minimise Anthropic API usage:
 | **Prompt caching** | System prompt and tool definitions are cached across requests |
 | **Quick-log chips** | One-tap chips above the chat input for common activities |
 
+## Insights tab
+
+The Insights tab combines two sources:
+
+| Source | Cost | Behaviour |
+| --- | --- | --- |
+| **Daily observation** | 1 Haiku call / child / calendar day | Cached in `child_insights`; stable for the rest of the day |
+| **Research bullets** | 0 LLM on tab visit | 5–7 bullets/day from `research_bullets`, selected with novelty + regional tiebreak |
+
+### Deploy & verify
+
+```bash
+npx supabase db push
+npx supabase functions deploy insights research-refresh
+npm run verify:insights      # fingerprint + JSON shape checks
+npm run audit:research       # source URL allowlist audit
+```
+
+### Research bank maintenance
+
+| When | What | How |
+| --- | --- | --- |
+| **Once** (production) | Fill ~1,050 research bullets | GitHub Actions → **Research one-time bootstrap** |
+| **Weekly** (automatic) | Append new bullets to under-covered packs | `research-cron-weekly.yml` — Sunday 03:00 UTC |
+| **Monthly** (automatic) | URL audit, stale review, replacements | `research-cron-hygiene.yml` — first Sunday 05:00 UTC |
+| **Dev / testing** | Skip bootstrap | Migration `011` seeds 12 bullets — Insights tab works |
+
+Manual scripts (`npm run bootstrap:research`) are for local debugging or if you prefer not to use GitHub Actions for the one-time fill.
+
+GitHub Actions needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` repository secrets.
+
 ## Quick-log tooltips
 
 Tapping `+ Log` on any activity card on the home screen opens a compact tooltip bubble directly below the button — no page navigation required.
@@ -105,11 +153,13 @@ components/
   home/               QuickLogCard (tooltip), TodayFeed, SleepBox
   journey/            Timeline with sleep duration labels
   memories/           Memory card and grid
-hooks/                React hooks (use-chat, use-memories, use-journey-timeline)
-services/             Supabase data layer (events, media, memories)
+hooks/                React hooks (use-chat, use-insights, use-memories, use-journey-timeline)
+services/             Supabase data layer (events, media, memories, insights)
 supabase/
   functions/chat/     Claude edge function + intent parser
-  migrations/         Database schema (001–004)
+  functions/insights/ Daily observation cache + research selection
+  functions/research-refresh/ Research bank bootstrap, append, hygiene
+  migrations/         Database schema (001–011)
 ```
 
 ## Learn more

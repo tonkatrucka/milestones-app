@@ -9,11 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { pickImage } from '@/lib/pick-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MAX_CHAT_PHOTOS } from '@/services/chat';
 
 const QUICK_LOG_CHIPS = [
   { id: 'wet', label: 'Wet nappy', text: 'Wet nappy', icon: 'water-outline' },
@@ -23,7 +24,7 @@ const QUICK_LOG_CHIPS = [
 ] as const;
 
 interface ChatInputProps {
-  onSend: (text: string, imageUri?: string) => void;
+  onSend: (text: string, imageUris?: string[]) => void;
   onQuickLog: (text: string) => void;
   disabled?: boolean;
 }
@@ -32,32 +33,39 @@ export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputPro
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const [text, setText] = useState('');
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageUris, setImageUris] = useState<string[]>([]);
 
-  const pickImage = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow Milestones to access your photos.');
+  const pickImages = useCallback(async () => {
+    if (imageUris.length >= MAX_CHAT_PHOTOS) {
+      Alert.alert('Limit reached', `You can attach up to ${MAX_CHAT_PHOTOS} photos per message.`);
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const uris = await pickImage({
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_CHAT_PHOTOS - imageUris.length,
       quality: 0.8,
     });
-    if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+    if (uris) {
+      setImageUris((prev) => [...prev, ...uris].slice(0, MAX_CHAT_PHOTOS));
     }
+  }, [imageUris.length]);
+
+  const removeImage = useCallback((index: number) => {
+    setImageUris((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed && !imageUri) return;
-    onSend(trimmed || '📷', imageUri ?? undefined);
+    if (!trimmed && imageUris.length === 0) return;
+    const fallbackText =
+      imageUris.length > 1 ? `📷 (${imageUris.length} photos)` : '📷';
+    onSend(trimmed || fallbackText, imageUris.length > 0 ? imageUris : undefined);
     setText('');
-    setImageUri(null);
-  }, [text, imageUri, onSend]);
+    setImageUris([]);
+  }, [text, imageUris, onSend]);
 
-  const canSend = (text.trim().length > 0 || imageUri !== null) && !disabled;
+  const canSend = (text.trim().length > 0 || imageUris.length > 0) && !disabled;
+  const atPhotoLimit = imageUris.length >= MAX_CHAT_PHOTOS;
 
   return (
     <View style={styles.container}>
@@ -86,27 +94,37 @@ export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputPro
         ))}
       </ScrollView>
 
-      {imageUri && (
-        <View style={styles.imagePreviewRow}>
-          <View style={styles.imagePreviewWrapper}>
-            <Image source={{ uri: imageUri }} style={styles.imagePreview} contentFit="cover" />
-            <Pressable
-              style={[styles.removeImageBtn, { backgroundColor: colors.background }]}
-              onPress={() => setImageUri(null)}
-              hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={colors.muted} />
-            </Pressable>
-          </View>
-        </View>
+      {imageUris.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.imagePreviewRow}
+          style={styles.imagePreviewScroll}>
+          {imageUris.map((uri, index) => (
+            <View key={`${uri}-${index}`} style={styles.imagePreviewWrapper}>
+              <Image source={{ uri }} style={styles.imagePreview} contentFit="cover" />
+              <Pressable
+                style={[styles.removeImageBtn, { backgroundColor: colors.background }]}
+                onPress={() => removeImage(index)}
+                hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={colors.muted} />
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       <View style={styles.inputRow}>
         <Pressable
           style={[styles.attachBtn, { backgroundColor: colors.inputBackground }]}
-          onPress={pickImage}
-          disabled={disabled}
+          onPress={pickImages}
+          disabled={disabled || atPhotoLimit}
           hitSlop={8}>
-          <Ionicons name="attach" size={22} color={disabled ? colors.muted : colors.primary} />
+          <Ionicons
+            name="attach"
+            size={22}
+            color={disabled || atPhotoLimit ? colors.muted : colors.primary}
+          />
         </Pressable>
 
         <TextInput
@@ -175,12 +193,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  imagePreviewRow: {
+  imagePreviewScroll: {
     marginBottom: Spacing.sm,
+  },
+  imagePreviewRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.md,
   },
   imagePreviewWrapper: {
-    alignSelf: 'flex-start',
     position: 'relative',
   },
   imagePreview: {

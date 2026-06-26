@@ -1,54 +1,92 @@
 import { Platform } from 'react-native';
 
-const primaryColor = '#E07A5F';
-const secondaryColor = '#81B29A';
+import {
+  PaletteAnchors,
+  PaletteCool,
+  PaletteGreen,
+  PaletteNeutralsCool,
+  PaletteNeutralsWarm,
+  PalettePeach,
+  REFERENCE_PALETTE_NAME,
+} from './reference-palette';
+
+export { REFERENCE_PALETTE_NAME };
+
+/**
+ * Stillwater Sage — layered surfaces (light mode)
+ * L0 background → L1 surface → L2 card → L3 elevated
+ * Soft light base (champagne); each layer steps lighter toward the top.
+ */
+const lightLayers = {
+  background: PaletteNeutralsWarm.champagne,
+  surface: PaletteNeutralsCool.offWhite,
+  inputBackground: PaletteNeutralsCool.offWhite,
+  card: PaletteNeutralsCool.offWhite,
+  elevated: PaletteNeutralsWarm.warmCream,
+} as const;
+
+/**
+ * Stillwater Sage — layered surfaces (dark mode)
+ * Deep forest base; each layer steps lighter toward the top.
+ */
+const darkLayers = {
+  background: PaletteGreen.forestShadow,
+  surface: PaletteGreen.deepMoss,
+  inputBackground: PaletteGreen.deepMoss,
+  card: PaletteGreen.oliveSage,
+  elevated: PaletteAnchors.sageGreen,
+} as const;
+
+const primaryColor = PalettePeach.terracotta;
+const secondaryColor = PaletteCool.seaGlass;
 
 export const Colors = {
   light: {
-    text: '#1C1C1E',
-    background: '#FDF6EC',
+    ...lightLayers,
+    text: PaletteNeutralsCool.charcoal,
     tint: primaryColor,
-    icon: '#9E9E9E',
-    tabIconDefault: '#B0B0B0',
+    icon: PaletteNeutralsWarm.taupe,
+    tabIconDefault: PaletteNeutralsCool.stoneGrey,
     tabIconSelected: primaryColor,
     primary: primaryColor,
     secondary: secondaryColor,
-    card: '#FFFFFF',
-    border: '#EDE8E0',
-    muted: '#9E9E9E',
-    inputBackground: '#F5F0E8',
-    danger: '#E53935',
+    border: PaletteNeutralsCool.coolGrey,
+    muted: PaletteNeutralsCool.stoneGrey,
+    danger: PalettePeach.clay,
+    onPrimary: PaletteNeutralsWarm.warmCream,
   },
   dark: {
-    text: '#F0EDE8',
-    background: '#1C1A28',
-    tint: primaryColor,
-    icon: '#9BA1A6',
-    tabIconDefault: '#5A5A6E',
-    tabIconSelected: primaryColor,
-    primary: primaryColor,
-    secondary: secondaryColor,
-    card: '#2A2838',
-    border: '#3A3848',
-    muted: '#6E6E82',
-    inputBackground: '#34324A',
-    danger: '#EF5350',
+    ...darkLayers,
+    text: PaletteNeutralsWarm.champagne,
+    tint: PaletteAnchors.mutedApricot,
+    icon: PaletteAnchors.sageGreen,
+    tabIconDefault: PaletteGreen.eucalyptus,
+    tabIconSelected: PaletteAnchors.mutedApricot,
+    primary: PaletteAnchors.mutedApricot,
+    secondary: PaletteCool.mintPebble,
+    border: PaletteNeutralsCool.slate,
+    muted: PaletteAnchors.sageGreen,
+    danger: PalettePeach.terracotta,
+    onPrimary: PaletteNeutralsCool.charcoal,
   },
 };
 
+/** @deprecated Prefer `useAppColors()` for the active colour scheme */
+export const AppColors = Colors.light;
+
 export const EventColors = {
-  nappy: '#7BAFD4',
-  meal: '#E8A87C',
-  sleep: '#9B8EC4',
+  nappy: PaletteCool.slateBlue,
+  meal: PaletteAnchors.mutedApricot,
+  sleep: PaletteCool.lavenderGrey,
 } as const;
 
 export const MilestoneColors = {
-  language: '#F4A261',
-  movement: '#2A9D8F',
-  development: '#E76F51',
+  language: PaletteAnchors.mutedApricot,
+  movement: PaletteCool.seaGlass,
+  development: PalettePeach.terracotta,
 } as const;
 
-export const MemoryColor = '#9B59B6';
+export const MemoryColor = PalettePeach.dustyRose;
 
 export const Fonts = Platform.select({
   ios: {

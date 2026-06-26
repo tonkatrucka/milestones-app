@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,12 +8,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { acceptInvite } from '@/services/invites';
 import { useActiveChild } from '@/hooks/use-active-child';
+import {
+  clearPendingInviteToken,
+  setPendingInviteToken,
+} from '@/lib/pending-invite';
 
 type State = 'idle' | 'loading' | 'success' | 'error';
 
@@ -22,21 +26,36 @@ export default function AcceptInviteScreen() {
   const colors = Colors[scheme];
   const router = useRouter();
   const { session } = useAuth();
-  const { isChildrenLoading } = useActiveChild(session?.user.id ?? null);
+  const { isChildrenLoading, refreshChildren } = useActiveChild(session?.user.id ?? null);
 
   const [state, setState] = useState<State>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (token && !session) {
+      setPendingInviteToken(token).catch(() => {});
+    }
+  }, [token, session]);
 
   const handleAccept = async () => {
     if (!token || !session) return;
     setState('loading');
     try {
       await acceptInvite(token);
+      await clearPendingInviteToken();
+      refreshChildren();
       setState('success');
     } catch (e: unknown) {
       setErrorMessage(e instanceof Error ? e.message : 'Invalid or expired invite link.');
       setState('error');
     }
+  };
+
+  const goToSignIn = () => {
+    if (token) {
+      setPendingInviteToken(token).catch(() => {});
+    }
+    router.push('/login' as never);
   };
 
   if (!session) {
@@ -52,7 +71,7 @@ export default function AcceptInviteScreen() {
           </Text>
           <Pressable
             style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => router.push('/(auth)/login' as any)}>
+            onPress={goToSignIn}>
             <Text style={styles.buttonText}>Sign in or create account</Text>
           </Pressable>
         </View>
@@ -73,7 +92,10 @@ export default function AcceptInviteScreen() {
           </Text>
           <Pressable
             style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => router.replace('/(tabs)' as any)}>
+            onPress={async () => {
+              await clearPendingInviteToken();
+              router.replace('/(tabs)' as never);
+            }}>
             <Text style={styles.buttonText}>Open Milestones</Text>
           </Pressable>
         </View>
@@ -92,7 +114,10 @@ export default function AcceptInviteScreen() {
           <Text style={[styles.body, { color: colors.muted }]}>{errorMessage}</Text>
           <Pressable
             style={[styles.button, { backgroundColor: colors.primary }]}
-            onPress={() => router.replace('/(tabs)' as any)}>
+            onPress={async () => {
+              await clearPendingInviteToken();
+              router.replace('/(tabs)' as never);
+            }}>
             <Text style={styles.buttonText}>Go to home</Text>
           </Pressable>
         </View>

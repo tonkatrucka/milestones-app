@@ -67,6 +67,13 @@ export async function uploadChatMedia(
   return uploadToBucket('chat-media', path, localUri, mimeType);
 }
 
+export async function uploadChatMediaBatch(
+  childId: string,
+  localUris: string[],
+): Promise<string[]> {
+  return Promise.all(localUris.map((uri) => uploadChatMedia(childId, uri)));
+}
+
 export async function uploadChildAvatar(
   childId: string,
   localUri: string,

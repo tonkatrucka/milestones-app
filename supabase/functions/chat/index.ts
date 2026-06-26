@@ -1,6 +1,16 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
-import { parseIntent } from './intent-parser.ts';
+import {
+  answerSimpleQuery,
+  buildTodaySnapshotText,
+  handleReadTool,
+} from '../_shared/child-data.ts';
+import {
+  classifyBatch,
+  parseIntent,
+  parseQueryIntent,
+  type MessageClass,
+} from './intent-parser.ts';
 
 // ─── CORS headers ─────────────────────────────────────────────────────────────
 
@@ -24,6 +34,7 @@ interface IncomingMessage {
 interface RequestBody {
   messages: IncomingMessage[];           // current batch — actionable, may trigger tools
   contextMessages?: IncomingMessage[];   // prior history — read-only context, do not log
+  attachedMediaUrls?: string[];          // explicit photo URLs from the client batch
   child: { id: string; name: string; date_of_birth: string };
   currentDate: string;
 }
@@ -193,13 +204,128 @@ const TOOLS: any[] = [
       },
       required: ['question'],
     },
-    // Caching the tool block saves ~1 000 input tokens on every cached request
+  },
+  {
+    name: 'get_daily_summary',
+    description: 'Get activity totals for a single day (meals, nappies, sleep).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        date: { type: 'string', description: 'Date YYYY-MM-DD. Omit for today.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_last_event',
+    description: 'Get the most recent event of a given type.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        type: { type: 'string', enum: ['nappy', 'meal', 'sleep'] },
+      },
+      required: ['type'],
+    },
+  },
+  {
+    name: 'get_events',
+    description: 'List recent daily events, optionally filtered by type.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        days: { type: 'number', description: 'How many days back (default 7, max 30)' },
+        type: { type: 'string', enum: ['nappy', 'meal', 'sleep'] },
+        limit: { type: 'number', description: 'Max events to return (default 30)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_milestones',
+    description: 'List developmental milestones from the Journey tab.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        category: { type: 'string', enum: ['language', 'movement', 'development'] },
+        start_date: { type: 'string', description: 'YYYY-MM-DD' },
+        end_date: { type: 'string', description: 'YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_memories',
+    description: 'List memories from the Journey tab.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        start_date: { type: 'string', description: 'YYYY-MM-DD' },
+        end_date: { type: 'string', description: 'YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_period_summary',
+    description: 'Summarise activity over a period (daily breakdown + totals).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        days: { type: 'number', description: 'Days to include (default 7, max 90)' },
+        focus: { type: 'string', enum: ['nappy', 'meal', 'sleep'], description: 'Optional focus area' },
+      },
+      required: [],
+    },
     cache_control: { type: 'ephemeral' },
   },
 ];
 
 // Activity tools that skip the second Claude call after execution
 const ACTIVITY_TOOLS = new Set(['log_nappy', 'log_meal', 'log_sleep_start', 'log_sleep_end']);
+
+const READ_TOOLS = new Set([
+  'get_daily_summary',
+  'get_last_event',
+  'get_events',
+  'get_milestones',
+  'get_memories',
+  'get_period_summary',
+]);
+
+// Cached across requests — keep child/date/context out of this block
+const STATIC_SYSTEM_INSTRUCTIONS = `You are a warm, supportive assistant for parents tracking their baby's development and daily life.
+
+When parents describe something that happened:
+- Use the appropriate logging tool to record it in their app
+- Nappy, meal, and sleep events appear on the Home screen and in the Activities tab
+- Milestones and memories appear on the Journey tab
+- If a parent shares photo(s) or describes a special moment that is not a developmental achievement, use log_memory
+- If a parent describes a first word, first steps, or other developmental milestone, use log_milestone
+- Only use ask_clarification when the message is truly ambiguous and you cannot make a reasonable guess
+
+Reply structure (after logging in the current turn):
+1. Start with a brief warm, supportive comment about what the parent shared in their latest message(s) only.
+2. Then confirm what you just saved from this turn — be specific (e.g. "I've logged a 120ml bottle feed to today's activities" or "I've saved 'First steps' as a milestone on the Journey tab").
+Do not recap or mention items logged in earlier messages, even if they appear in the conversation context below.
+
+Be concise. Every reply that logs something must clearly tell the parent what was saved from this turn only.
+
+IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in the current turn. Do NOT call tools for anything in the "Recent conversation" context section — those events are already saved.
+
+When parents ask questions (not reporting new events):
+- Answer from the Today snapshot and read tools — do NOT call logging tools
+- Use read tools when the snapshot lacks enough detail (historical data, milestones, memories, multi-day summaries)
+- Only call logging tools when the parent is reporting something new this turn`;
+
+const QA_SYSTEM_INSTRUCTIONS = `When answering questions about the child:
+- Lead with facts from logged records — cite specific times, counts, and dates
+- Clearly separate facts from interpretation ("Based on your logs…")
+- You may add brief, light general context where helpful, but do not give medical diagnoses
+- If parents express health concerns, encourage them to consult their pediatrician
+- If no relevant data exists, say so honestly — never invent records
+- Be warm and concise`;
 
 // ─── Tool result helpers ──────────────────────────────────────────────────────
 
@@ -236,15 +362,20 @@ function formatLogConfirmation(toolName: string, input: Record<string, unknown>)
     case 'log_sleep_end':
       return "Logged wake-up to today's activities.";
     case 'log_milestone':
-      return `Saved milestone "${input.title}" (${input.category}) to the Journey timeline.`;
+      return `Saved milestone "${input.title}" (${input.category}) to the Journey tab.`;
     case 'log_memory':
-      return `Saved memory "${input.title}" to the Journey timeline.`;
+      return `Saved memory "${input.title}" to the Journey tab.`;
     default:
       return 'Record saved.';
   }
 }
 
 // ─── Tool handlers ────────────────────────────────────────────────────────────
+
+interface ToolHandleResult {
+  message: string;
+  event?: Record<string, unknown>;
+}
 
 async function handleTool(
   toolName: string,
@@ -255,21 +386,22 @@ async function handleTool(
   // deno-lint-ignore no-explicit-any
   adminDb: any,
   currentDate: string,
-): Promise<string> {
+  batchMediaUrls: string[] = [],
+): Promise<ToolHandleResult> {
   const now = new Date().toISOString();
 
   switch (toolName) {
     case 'log_nappy': {
-      const { error } = await adminDb.from('daily_events').insert({
+      const { data, error } = await adminDb.from('daily_events').insert({
         child_id: childId,
         type: 'nappy',
         occurred_at: input.occurred_at ?? now,
         notes: input.notes ?? null,
         metadata: { nappyType: input.nappy_type },
         created_by: userId,
-      });
+      }).select().single();
       if (error) throw new Error(`log_nappy: ${error.message}`);
-      return formatLogConfirmation('log_nappy', input);
+      return { message: formatLogConfirmation('log_nappy', input), event: data };
     }
 
     case 'log_meal': {
@@ -277,29 +409,29 @@ async function handleTool(
       if (input.amount_ml != null) metadata.amountMl = input.amount_ml;
       if (input.food) metadata.food = input.food;
 
-      const { error } = await adminDb.from('daily_events').insert({
+      const { data, error } = await adminDb.from('daily_events').insert({
         child_id: childId,
         type: 'meal',
         occurred_at: input.occurred_at ?? now,
         notes: input.notes ?? null,
         metadata,
         created_by: userId,
-      });
+      }).select().single();
       if (error) throw new Error(`log_meal: ${error.message}`);
-      return formatLogConfirmation('log_meal', input);
+      return { message: formatLogConfirmation('log_meal', input), event: data };
     }
 
     case 'log_sleep_start': {
-      const { error } = await adminDb.from('daily_events').insert({
+      const { data, error } = await adminDb.from('daily_events').insert({
         child_id: childId,
         type: 'sleep',
         occurred_at: input.occurred_at ?? now,
         notes: input.notes ?? null,
         metadata: {},
         created_by: userId,
-      });
+      }).select().single();
       if (error) throw new Error(`log_sleep_start: ${error.message}`);
-      return formatLogConfirmation('log_sleep_start', input);
+      return { message: formatLogConfirmation('log_sleep_start', input), event: data };
     }
 
     case 'log_sleep_end': {
@@ -317,16 +449,18 @@ async function handleTool(
         (e: { metadata: Record<string, unknown> }) => !e.metadata?.sleepEnd,
       );
 
-      if (!openSleep) return 'No open sleep session found to close.';
+      if (!openSleep) return { message: 'No open sleep session found to close.' };
 
       const sleepEnd = input.occurred_at ?? now;
-      const { error: updateErr } = await adminDb
+      const { data, error: updateErr } = await adminDb
         .from('daily_events')
         .update({ metadata: { ...openSleep.metadata, sleepEnd } })
-        .eq('id', openSleep.id);
+        .eq('id', openSleep.id)
+        .select()
+        .single();
 
       if (updateErr) throw new Error(`log_sleep_end update: ${updateErr.message}`);
-      return formatLogConfirmation('log_sleep_end', input);
+      return { message: formatLogConfirmation('log_sleep_end', input), event: data };
     }
 
     case 'log_milestone': {
@@ -336,11 +470,11 @@ async function handleTool(
         title: input.title,
         description: input.description ?? null,
         achieved_at: input.achieved_at ?? currentDate,
-        media_urls: [],
+        media_urls: batchMediaUrls.slice(0, 5),
         created_by: userId,
       });
       if (error) throw new Error(`log_milestone: ${error.message}`);
-      return formatLogConfirmation('log_milestone', input);
+      return { message: formatLogConfirmation('log_milestone', input) };
     }
 
     case 'log_memory': {
@@ -349,19 +483,29 @@ async function handleTool(
         title: input.title,
         description: input.description ?? null,
         occurred_at: input.occurred_at ?? currentDate,
-        media_urls: input.media_urls ?? [],
+        media_urls: [...new Set([...(input.media_urls ?? []), ...batchMediaUrls])].slice(0, 5),
         tags: input.tags ?? [],
         created_by: userId,
       });
       if (error) throw new Error(`log_memory: ${error.message}`);
-      return formatLogConfirmation('log_memory', input);
+      return { message: formatLogConfirmation('log_memory', input) };
     }
 
     case 'ask_clarification':
-      return `CLARIFICATION:${input.question}`;
+      return { message: `CLARIFICATION:${input.question}` };
+
+    case 'get_daily_summary':
+    case 'get_last_event':
+    case 'get_events':
+    case 'get_milestones':
+    case 'get_memories':
+    case 'get_period_summary': {
+      const message = await handleReadTool(toolName, input, adminDb, childId, currentDate);
+      return { message };
+    }
 
     default:
-      return `Unknown tool: ${toolName}`;
+      return { message: `Unknown tool: ${toolName}` };
   }
 }
 
@@ -389,7 +533,43 @@ Deno.serve(async (req: Request) => {
     const adminDb = createClient(supabaseUrl, serviceRoleKey);
 
     const body: RequestBody = await req.json();
-    const { messages, contextMessages = [], child, currentDate } = body;
+    const { messages, contextMessages = [], attachedMediaUrls = [], child, currentDate } = body;
+
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
+    }
+
+    const { data: member } = await userDb
+      .from('child_members')
+      .select('role')
+      .eq('child_id', child.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!member) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
+    }
+
+    // Collect public URLs for any photos attached to the current batch.
+    // These are forwarded to log_milestone / log_memory so the photo is saved
+    // alongside the DB record rather than only in chat_messages.
+    const batchMediaUrls: string[] = [
+      ...new Set([
+        ...attachedMediaUrls,
+        ...messages.flatMap((m) => {
+          if (!Array.isArray(m.content)) return [];
+          return (m.content as ContentBlock[])
+            .filter((b) => b.type === 'image')
+            .map((b) => (b as { type: 'image'; source: { type: 'url'; url: string } }).source.url);
+        }),
+      ]),
+    ].slice(0, 5);
 
     // ── Intent parser: bypass Claude for simple activity messages ─────────────
     // Only applies to the current batch (messages), never to contextMessages.
@@ -405,46 +585,104 @@ Deno.serve(async (req: Request) => {
       const batchUserMsgs = messages.filter(
         (m) => m.role === 'user' && typeof m.content === 'string',
       );
-      const confirmations: string[] = [];
-      let anyParseError = false;
+      const batchTexts = batchUserMsgs.map((m) => m.content as string);
+      const batchClass: MessageClass = classifyBatch(batchTexts);
 
-      for (const msg of batchUserMsgs) {
-        const intent = parseIntent(msg.content as string);
-        if (!intent) {
-          anyParseError = true; // unrecognised message — fall through to Claude
-          break;
+      // ── Simple query fast path (Tier 0) ─────────────────────────────────────
+      if (batchClass === 'simple_query' && batchTexts.length > 0) {
+        const replies: string[] = [];
+        let allMatched = true;
+
+        for (const text of batchTexts) {
+          const query = parseQueryIntent(text);
+          if (!query) {
+            allMatched = false;
+            break;
+          }
+          try {
+            replies.push(
+              await answerSimpleQuery(query, adminDb, child.id, child.name, currentDate),
+            );
+          } catch {
+            allMatched = false;
+            break;
+          }
         }
-        const result = await handleTool(
-          intent.toolName,
-          intent.input,
-          child.id,
-          user?.id ?? null,
-          adminDb,
-          currentDate,
-        );
-        if (result.startsWith('Error:')) {
-          anyParseError = true;
-          break;
+
+        if (allMatched && replies.length > 0) {
+          const reply = replies.length === 1 ? replies[0] : replies.join('\n\n');
+          return new Response(JSON.stringify({ content: reply, loggedEvents: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+          });
         }
-        confirmations.push(result);
       }
 
-      if (!anyParseError && confirmations.length > 0 && confirmations.length === batchUserMsgs.length) {
-        const reply = confirmations.length === 1
-          ? `Done! ${confirmations[0]}`
-          : `Done! ${confirmations.join(' ')}`;
-        return new Response(JSON.stringify({ content: reply }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-        });
+      // ── Logging fast path (Tier 0) ──────────────────────────────────────────
+      if (batchClass === 'log') {
+        const confirmations: string[] = [];
+        const loggedEvents: Record<string, unknown>[] = [];
+        let anyParseError = false;
+
+        for (const msg of batchUserMsgs) {
+          const intent = parseIntent(msg.content as string);
+          if (!intent) {
+            anyParseError = true;
+            break;
+          }
+          let result: ToolHandleResult;
+          try {
+            result = await handleTool(
+              intent.toolName,
+              intent.input,
+              child.id,
+              user.id,
+              adminDb,
+              currentDate,
+            );
+          } catch {
+            anyParseError = true;
+            break;
+          }
+          if (result.message.startsWith('Error:')) {
+            anyParseError = true;
+            break;
+          }
+          confirmations.push(result.message);
+          if (result.event) loggedEvents.push(result.event);
+        }
+
+        if (!anyParseError && confirmations.length > 0 && confirmations.length === batchUserMsgs.length) {
+          const reply = confirmations.length === 1
+            ? `Done! ${confirmations[0]}`
+            : `Done! ${confirmations.join(' ')}`;
+          return new Response(JSON.stringify({ content: reply, loggedEvents }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+          });
+        }
       }
-      // If any message wasn't matched or errored, fall through to Claude
+      // Mixed or unrecognised batch — fall through to Claude
     }
 
     // ── Build system prompt ───────────────────────────────────────────────────
     const age = calculateAge(child.date_of_birth, currentDate);
 
-    // Build optional read-only context block from prior messages
+    const todaySnapshot = await buildTodaySnapshotText(
+      adminDb,
+      child.id,
+      child.name,
+      currentDate,
+    );
+
+    const batchUserTexts = messages
+      .filter((m) => m.role === 'user' && typeof m.content === 'string')
+      .map((m) => m.content as string);
+    const requestClass: MessageClass = hasPhoto
+      ? 'unknown'
+      : classifyBatch(batchUserTexts.length > 0 ? batchUserTexts : ['']);
+
+    // Build per-request context (not cached — changes every turn)
     let contextBlock = '';
     if (contextMessages.length > 0) {
       const lines = contextMessages.map((m) => {
@@ -456,29 +694,25 @@ Deno.serve(async (req: Request) => {
       contextBlock = `\n\nRecent conversation (context only — already logged or answered, do NOT call tools for these again):\n${lines.join('\n')}`;
     }
 
-    const systemPrompt = `You are a warm, supportive assistant for parents tracking their baby's development and daily life.
+    const dynamicSystemPrompt = `You are helping the parents of ${child.name}, who is ${age} (born ${child.date_of_birth}). Today is ${currentDate}.
 
-You are helping the parents of ${child.name}, who is ${age} (born ${child.date_of_birth}). Today is ${currentDate}.
+Today snapshot: ${todaySnapshot}${contextBlock}`;
 
-When parents describe something that happened:
-- Use the appropriate logging tool to record it in their app
-- After logging, always confirm what you saved in your reply — be specific (e.g. "I've logged a 120ml bottle feed to today's activities" or "I've saved 'First steps' as a milestone on the Journey timeline")
-- Nappy, meal, and sleep events appear in today's activities and the Journey timeline
-- Milestones and memories appear on the Journey timeline
-- If a parent shares a photo or describes a special moment that is not a developmental achievement, use log_memory
-- If a parent describes a first word, first steps, or other developmental milestone, use log_milestone
-- Only use ask_clarification when the message is truly ambiguous and you cannot make a reasonable guess
-
-Be concise and supportive. Every reply that logs something must clearly tell the parent what was saved.
-
-IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in the current turn. Do NOT call tools for anything in the "Recent conversation" context section — those events are already saved.${contextBlock}`;
-
-    // System prompt with prompt caching — saves repeated input tokens after the first call
+    // Static instructions cached; child/date/context sent as a separate uncached block
     const systemParam = [
       {
         type: 'text' as const,
-        text: systemPrompt,
+        text: STATIC_SYSTEM_INSTRUCTIONS,
         cache_control: { type: 'ephemeral' as const },
+      },
+      {
+        type: 'text' as const,
+        text: QA_SYSTEM_INSTRUCTIONS,
+        cache_control: { type: 'ephemeral' as const },
+      },
+      {
+        type: 'text' as const,
+        text: dynamicSystemPrompt,
       },
     ];
 
@@ -497,12 +731,16 @@ IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in th
 
     let finalText = '';
     const loggedConfirmations: string[] = [];
+    const loggedEvents: Record<string, unknown>[] = [];
     const MAX_ITERATIONS = 5;
+    const needsSynthesis = requestClass === 'complex_query';
+    const synthesisMaxTokens = needsSynthesis ? 400 : 300;
+    let readToolsRan = false;
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await anthropic.messages.create({
         model,
-        max_tokens: 300,
+        max_tokens: i === 0 ? synthesisMaxTokens : 400,
         system: systemParam,
         tools: TOOLS,
         messages: apiMessages,
@@ -525,36 +763,41 @@ IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in th
 
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (tb) => {
-          let result: string;
+          let message: string;
           try {
-            result = await handleTool(
+            const result = await handleTool(
               tb.name,
               tb.input as Record<string, unknown>,
               child.id,
-              user?.id ?? null,
+              user.id,
               adminDb,
               currentDate,
+              batchMediaUrls,
             );
+            message = result.message;
+            if (result.event) loggedEvents.push(result.event);
+            if (READ_TOOLS.has(tb.name)) readToolsRan = true;
           } catch (err) {
-            result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+            message = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
 
           if (
-            !result.startsWith('Error:') &&
-            !result.startsWith('CLARIFICATION:') &&
-            !result.startsWith('No open')
+            !message.startsWith('Error:') &&
+            !message.startsWith('CLARIFICATION:') &&
+            !message.startsWith('No open') &&
+            !READ_TOOLS.has(tb.name)
           ) {
-            loggedConfirmations.push(result);
+            loggedConfirmations.push(message);
           }
 
-          if (result.startsWith('CLARIFICATION:')) {
-            finalText = result.replace('CLARIFICATION:', '');
+          if (message.startsWith('CLARIFICATION:')) {
+            finalText = message.replace('CLARIFICATION:', '');
           }
 
           return {
             type: 'tool_result' as const,
             tool_use_id: tb.id,
-            content: result,
+            content: message,
           };
         }),
       );
@@ -564,14 +807,32 @@ IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in th
         break;
       }
 
-      // Activity-only tools: skip the second Claude call and use server-built confirmations
       const allActivityTools = toolUseBlocks.every((tb) => ACTIVITY_TOOLS.has(tb.name));
       if (allActivityTools) {
         break;
       }
 
+      const allReadTools = toolUseBlocks.every((tb) => READ_TOOLS.has(tb.name));
+      if (allReadTools) {
+        const readReply = toolResults.map((r) => r.content).join('\n\n');
+        if (!needsSynthesis) {
+          finalText = readReply;
+          break;
+        }
+        // Complex query: one synthesis follow-up with tool results
+        if (i >= MAX_ITERATIONS - 1) {
+          finalText = readReply;
+          break;
+        }
+      }
+
       apiMessages.push({ role: 'assistant', content: response.content });
       apiMessages.push({ role: 'user', content: toolResults });
+
+      // After read tools + synthesis iteration, stop if we already got a text response
+      if (allReadTools && needsSynthesis && i > 0) {
+        break;
+      }
     }
 
     // Fallback: tools ran but Claude returned no text
@@ -582,7 +843,11 @@ IMPORTANT — Action scope: Only call logging tools for the NEW message(s) in th
           : `Done! ${loggedConfirmations.join(' ')}`;
     }
 
-    return new Response(JSON.stringify({ content: finalText }), {
+    if (!finalText.trim() && readToolsRan) {
+      finalText = "I couldn't find matching records for that question.";
+    }
+
+    return new Response(JSON.stringify({ content: finalText, loggedEvents }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });

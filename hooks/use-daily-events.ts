@@ -42,7 +42,15 @@ export function useDailyEvents(childId: string | null) {
   }, [refresh]);
 
   const addEvent = useCallback((event: DailyEvent) => {
-    setTodayEvents((prev) => [event, ...prev]);
+    setTodayEvents((prev) => {
+      const idx = prev.findIndex((e) => e.id === event.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = event;
+        return next;
+      }
+      return [event, ...prev];
+    });
     setLastEvents((prev) => ({ ...prev, [event.type]: event }));
   }, []);
 

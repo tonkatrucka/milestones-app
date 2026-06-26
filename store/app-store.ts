@@ -8,6 +8,7 @@ interface AppStore {
 
   setChildren: (children: Child[]) => void;
   addChild: (child: Child) => void;
+  patchChild: (id: string, updates: Partial<Child>) => void;
   setActiveChildId: (id: string) => void;
   setIsChildrenLoading: (loading: boolean) => void;
   activeChild: () => Child | null;
@@ -35,6 +36,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       children: [...children, child],
       activeChildId: get().activeChildId ?? child.id,
+    });
+  },
+
+  patchChild: (id, updates) => {
+    set({
+      children: get().children.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     });
   },
 

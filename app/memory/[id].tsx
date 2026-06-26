@@ -12,13 +12,14 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { parseCalendarDate } from '@/lib/calendar-date';
 import { useAuth } from '@/hooks/use-auth';
-import { useActiveChild } from '@/hooks/use-active-child';
+import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { deleteMemory, getMemory, updateMemory } from '@/services/memories';
 import { uploadMemoryMedia } from '@/services/media';
@@ -49,8 +50,7 @@ function parseTags(value: string): string[] {
 }
 
 function toDisplayDate(isoDate: string): string {
-  const d = parseISO(isoDate);
-  return format(d, 'dd/MM/yyyy');
+  return format(parseCalendarDate(isoDate), 'dd/MM/yyyy');
 }
 
 function isLocalUri(uri: string): boolean {
@@ -63,8 +63,8 @@ export default function MemoryDetailScreen() {
   const colors = Colors[scheme];
   const router = useRouter();
   const { session } = useAuth();
-  const { activeChild } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
+  const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
 
   const [memory, setMemory] = useState<Memory | null>(null);
   const [title, setTitle] = useState('');
@@ -96,19 +96,13 @@ export default function MemoryDetailScreen() {
       Alert.alert('Limit reached', 'You can add up to 5 photos per memory.');
       return;
     }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow Milestones to access your photos.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const uris = await pickImage({
       allowsMultipleSelection: true,
       selectionLimit: 5 - photos.length,
       quality: 0.8,
     });
-    if (!result.canceled) {
-      setPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 5));
+    if (uris) {
+      setPhotos((prev) => [...prev, ...uris].slice(0, 5));
     }
   };
 
@@ -229,6 +223,7 @@ export default function MemoryDetailScreen() {
                 style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                 value={title}
                 onChangeText={setTitle}
+                editable={canWrite}
               />
             </View>
 
@@ -241,6 +236,7 @@ export default function MemoryDetailScreen() {
                 keyboardType="numeric"
                 placeholder="DD/MM/YYYY"
                 placeholderTextColor={colors.muted}
+                editable={canWrite}
               />
             </View>
 
@@ -254,6 +250,7 @@ export default function MemoryDetailScreen() {
                 numberOfLines={4}
                 placeholder="What made this moment special?"
                 placeholderTextColor={colors.muted}
+                editable={canWrite}
               />
             </View>
 
@@ -266,6 +263,7 @@ export default function MemoryDetailScreen() {
                 placeholder="family, travel, birthday"
                 placeholderTextColor={colors.muted}
                 autoCapitalize="none"
+                editable={canWrite}
               />
             </View>
 
@@ -275,14 +273,18 @@ export default function MemoryDetailScreen() {
                 {photos.map((uri, i) => (
                   <Pressable
                     key={`${uri}-${i}`}
-                    onLongPress={() => {
-                      setPhotos((p) => p.filter((_, idx) => idx !== i));
-                      setActivePhoto(0);
-                    }}>
+                    onLongPress={
+                      canWrite
+                        ? () => {
+                            setPhotos((p) => p.filter((_, idx) => idx !== i));
+                            setActivePhoto(0);
+                          }
+                        : undefined
+                    }>
                     <Image source={{ uri }} style={styles.photoThumb} contentFit="cover" />
                   </Pressable>
                 ))}
-                {photos.length < 5 && (
+                {canWrite && photos.length < 5 && (
                   <Pressable
                     style={[styles.addPhotoButton, { backgroundColor: MemoryColor + '22' }]}
                     onPress={pickPhoto}>
@@ -290,28 +292,34 @@ export default function MemoryDetailScreen() {
                   </Pressable>
                 )}
               </View>
-              <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
+              {canWrite && (
+                <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
       </ScrollView>
 
       <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        <Pressable
-          style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
-          onPress={handleSave}
-          disabled={isSaving}>
-          {isSaving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.actionButtonText}>Save changes</Text>
-          )}
-        </Pressable>
-        <Pressable
-          style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
-          onPress={handleDelete}>
-          <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
-        </Pressable>
+        {canWrite && (
+          <>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.actionButtonText}>Save changes</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
+              onPress={handleDelete}>
+              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
+            </Pressable>
+          </>
+        )}
       </View>
     </View>
   );

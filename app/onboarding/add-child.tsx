@@ -12,33 +12,15 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { pickImage } from '@/lib/pick-image';
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/app-store';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatDateInput, parseDateInput } from '@/lib/calendar-date';
 import { uploadChildAvatar } from '@/services/media';
 import { useAuth } from '@/hooks/use-auth';
-
-function formatDateInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
-
-function parseDateInput(value: string): string | null {
-  const parts = value.split('/');
-  if (parts.length !== 3 || parts[2].length !== 4) return null;
-  const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10);
-  const year = parseInt(parts[2], 10);
-  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-  const date = new Date(year, month - 1, day);
-  if (date > new Date()) return null;
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
 
 export default function AddChildScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -53,18 +35,12 @@ export default function AddChildScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const pickAvatar = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow Milestones to access your photos.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+    const uris = await pickImage({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+    if (uris?.[0]) setAvatarUri(uris[0]);
   };
 
   const handleSave = async () => {

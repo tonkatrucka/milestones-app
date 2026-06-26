@@ -17,9 +17,11 @@ import { differenceInMinutes, format } from 'date-fns';
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
+import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { getLastEventByType, logEvent, updateEvent } from '@/services/events';
 import type { DailyEvent, EventType, NappyMetadata, MealMetadata, SleepMetadata } from '@/lib/database.types';
+import { useLogConfirmationStore } from '@/store/log-confirmation-store';
 
 const NAPPY_TYPES: NappyMetadata['nappyType'][] = ['wet', 'dirty', 'both', 'dry'];
 const MEAL_TYPES: MealMetadata['mealType'][] = ['breast', 'bottle', 'solid', 'snack'];
@@ -88,6 +90,7 @@ export default function LogEventScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const activeChildId = useAppStore((s) => s.activeChildId);
+  const { isLoading: isRoleLoading } = useRequireCanWrite(activeChildId, session?.user.id ?? null);
 
   const accent = type ? EventColors[type] : colors.primary;
 
@@ -152,11 +155,23 @@ export default function LogEventScreen() {
     setIsLoading(true);
 
     try {
+      let saved: DailyEvent | null = null;
+
       if (type === 'nappy') {
-        await logEvent({ childId: activeChildId, type, occurredAt: time, notes: notes.trim() || undefined, metadata: { nappyType }, userId: session.user.id });
+        saved = await logEvent({
+          childId: activeChildId,
+          type,
+          occurredAt: time,
+          notes: notes.trim() || undefined,
+          metadata: { nappyType },
+          userId: session.user.id,
+        });
       } else if (type === 'meal') {
-        await logEvent({
-          childId: activeChildId, type, occurredAt: time, notes: notes.trim() || undefined,
+        saved = await logEvent({
+          childId: activeChildId,
+          type,
+          occurredAt: time,
+          notes: notes.trim() || undefined,
           metadata: {
             mealType,
             ...(amount ? { amountMl: parseInt(amount, 10) } : {}),
@@ -171,14 +186,25 @@ export default function LogEventScreen() {
             setIsLoading(false);
             return;
           }
-          await updateEvent(ongoingSleep.id, {
+          saved = await updateEvent(ongoingSleep.id, {
             occurred_at: sleepStart.toISOString(),
             metadata: { sleepEnd: sleepEnd.toISOString() } as SleepMetadata,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
           });
         } else if (sleepMode === 'new') {
-          await logEvent({ childId: activeChildId, type: 'sleep', occurredAt: sleepStart, notes: notes.trim() || undefined, metadata: {}, userId: session.user.id });
+          saved = await logEvent({
+            childId: activeChildId,
+            type: 'sleep',
+            occurredAt: sleepStart,
+            notes: notes.trim() || undefined,
+            metadata: {},
+            userId: session.user.id,
+          });
         }
+      }
+
+      if (saved) {
+        useLogConfirmationStore.getState().confirmLog(saved);
       }
       router.back();
     } catch (e: unknown) {

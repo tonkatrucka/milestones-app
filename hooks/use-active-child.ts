@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/app-store';
 
@@ -22,21 +22,18 @@ export function useActiveChild(userId: string | null) {
     useAppStore();
   const activeChild = useAppStore((s) => s.activeChild());
 
-  useEffect(() => {
+  const fetchChildren = useCallback(() => {
     if (!userId) {
       setIsChildrenLoading(false);
       return;
     }
 
-    let mounted = true;
     setIsChildrenLoading(true);
-
     supabase
       .from('children')
       .select('*')
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
-        if (!mounted) return;
         if (error) {
           console.error('[useActiveChild] query failed:', error.message);
         } else {
@@ -44,11 +41,15 @@ export function useActiveChild(userId: string | null) {
         }
         setIsChildrenLoading(false);
       });
+  }, [userId, setChildren, setIsChildrenLoading]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [userId]);
+  useEffect(() => {
+    if (!userId) {
+      setIsChildrenLoading(false);
+      return;
+    }
+    fetchChildren();
+  }, [userId, fetchChildren]);
 
-  return { children, activeChildId, activeChild, isChildrenLoading };
+  return { children, activeChildId, activeChild, isChildrenLoading, refreshChildren: fetchChildren };
 }

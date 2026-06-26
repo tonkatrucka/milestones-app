@@ -17,6 +17,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  clearPendingInviteToken,
+  getPendingInviteToken,
+} from '@/lib/pending-invite';
 
 const STORAGE_EMAIL_KEY = '@milestones/remembered_email';
 const STORAGE_REMEMBER_KEY = '@milestones/remember_me';
@@ -99,9 +103,13 @@ export default function LoginScreen() {
       // Persist email in the background — never blocks navigation.
       persistRememberedEmail(email.trim(), rememberMe);
 
-      // Navigate immediately rather than waiting for the route guard's
-      // useEffect, which has timing-dependent behaviour on Android.
-      router.replace('/' as any);
+      const pendingInvite = await getPendingInviteToken();
+      if (pendingInvite) {
+        await clearPendingInviteToken();
+        router.replace(`/invite/${pendingInvite}` as never);
+      } else {
+        router.replace('/' as never);
+      }
 
     } catch {
       setError('Something went wrong. Please try again.');

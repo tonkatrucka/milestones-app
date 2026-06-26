@@ -1,18 +1,41 @@
 import { useCallback, useEffect } from 'react';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { DefaultTheme, DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+import { getPendingInviteToken } from '@/lib/pending-invite';
+import { Colors } from '@/constants/theme';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+function useNavigationTheme() {
+  const scheme = useColorScheme();
+  const palette = Colors[scheme];
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      primary: palette.primary,
+      background: palette.background,
+      card: palette.elevated,
+      text: palette.text,
+      border: palette.border,
+      notification: palette.primary,
+    },
+  };
+}
 
 /**
  * Handles Supabase deep links for email confirmation and password recovery.
@@ -64,6 +87,7 @@ function useDeepLinkAuth() {
 }
 
 export default function RootLayout() {
+  const navigationTheme = useNavigationTheme();
   const colorScheme = useColorScheme();
   const { session, isLoading } = useAuth();
   const pathname = usePathname();
@@ -82,21 +106,36 @@ export default function RootLayout() {
       pathname === '/register' ||
       pathname === '/forgot-password' ||
       pathname === '/reset-password';
+    const isInviteScreen = pathname.startsWith('/invite/');
 
     // Keep the user on /reset-password while they set a new password
     // even though they have a valid (recovery) session.
     const isResetPassword = pathname === '/reset-password';
 
-    if (!session && !isAuthScreen) {
-      router.replace('/login' as any);
+    if (!session && !isAuthScreen && !isInviteScreen) {
+      router.replace('/login' as never);
     } else if (session && isAuthScreen && !isResetPassword) {
-      router.replace('/' as any);
+      getPendingInviteToken().then((pending) => {
+        router.replace((pending ? `/invite/${pending}` : '/') as never);
+      });
     }
   }, [session, isLoading, pathname]);
 
+  useEffect(() => {
+    if (isLoading || !session) return;
+    if (pathname.startsWith('/invite/')) return;
+
+    getPendingInviteToken().then((pending) => {
+      if (pending) {
+        router.replace(`/invite/${pending}` as never);
+      }
+    });
+  }, [session, isLoading, pathname, router]);
+
   return (
+    <GestureHandlerRootView style={styles.root}>
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={navigationTheme}>
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -110,8 +149,13 @@ export default function RootLayout() {
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', title: 'Accept invite' }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

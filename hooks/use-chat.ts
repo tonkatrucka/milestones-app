@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/use-auth';
 import {
   getChatMessagesForDay,
   getOldestMsgBeforeDay,
   getRecentChatContext,
   localDateString,
+  MAX_CHAT_PHOTOS,
   saveChatMessage,
 } from '@/services/chat';
-import { uploadChatMedia } from '@/services/media';
-import type { ChatMessage } from '@/lib/database.types';
+import { uploadChatMediaBatch } from '@/services/media';
+import {
+  linkChatPhotosToRecentRecords,
+  photoUrlsFromBatchMessages,
+} from '@/services/chat-media-link';
+import type { ChatMessage, DailyEvent } from '@/lib/database.types';
 
 const DEBOUNCE_MS = 3000;
 const CONTEXT_LIMIT = 10;
@@ -17,7 +23,10 @@ export function useChat(
   childId: string | null,
   childName: string | null,
   childDob: string | null,
+  onActivityLogged?: (events: DailyEvent[]) => void,
 ) {
+  const { session } = useAuth();
+  const userId = session?.user.id ?? null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAwaitingReply, setIsAwaitingReply] = useState(false);
@@ -25,6 +34,8 @@ export function useChat(
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
   const oldestLoadedDayRef = useRef<string>(localDateString());
+  const loadingOlderRef = useRef(false);
+  const hasMoreDaysRef = useRef(true);
   const pendingBatchRef = useRef<{ ids: string[]; hasPhoto: boolean }>({
     ids: [],
     hasPhoto: false,
@@ -33,15 +44,26 @@ export function useChat(
   const currentFlushIdsRef = useRef<Set<string>>(new Set());
   const flushInProgressRef = useRef(false);
 
+  useEffect(() => {
+    hasMoreDaysRef.current = hasMoreDays;
+  }, [hasMoreDays]);
+
   // Initial load: today's messages, or the most recent day with messages if today is empty
   useEffect(() => {
-    if (!childId) {
+    if (!childId || !userId) {
       setMessages([]);
       setHasMoreDays(true);
+      hasMoreDaysRef.current = true;
+      loadingOlderRef.current = false;
+      setIsLoadingOlder(false);
       return;
     }
 
     setIsLoading(true);
+    setHasMoreDays(true);
+    hasMoreDaysRef.current = true;
+    loadingOlderRef.current = false;
+    setIsLoadingOlder(false);
     const today = localDateString();
     oldestLoadedDayRef.current = today;
 
@@ -56,6 +78,7 @@ export function useChat(
       if (!prevTs) {
         setMessages([]);
         setHasMoreDays(false);
+        hasMoreDaysRef.current = false;
         return;
       }
       const prevDay = localDateString(new Date(prevTs));
@@ -67,14 +90,14 @@ export function useChat(
     loadInitial()
       .catch((e) => console.error('[useChat] initial load failed:', e))
       .finally(() => setIsLoading(false));
-  }, [childId]);
+  }, [childId, userId]);
 
-  // Clear debounce timer when the active child changes
+  // Clear debounce timer when the active child or user changes
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [childId]);
+  }, [childId, userId]);
 
   const flushBatch = useCallback(async () => {
     if (!childId || !childName || !childDob || flushInProgressRef.current) return;
@@ -98,11 +121,15 @@ export function useChat(
 
       const toApiMessage = (m: ChatMessage) => {
         if (m.media_urls.length > 0 && m.role === 'user' && batchIds.has(m.id)) {
+          const photos = m.media_urls.slice(0, MAX_CHAT_PHOTOS);
           return {
             role: m.role as 'user' | 'assistant',
             content: [
-              { type: 'image', source: { type: 'url', url: m.media_urls[0] } },
-              { type: 'text', text: m.content },
+              ...photos.map((url) => ({
+                type: 'image' as const,
+                source: { type: 'url' as const, url },
+              })),
+              { type: 'text' as const, text: m.content },
             ],
           };
         }
@@ -116,10 +143,13 @@ export function useChat(
 
       if (batchMessages.length === 0) return;
 
+      const attachedMediaUrls = photoUrlsFromBatchMessages(batchMessages);
+
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           messages: batchMessages.map(toApiMessage),
           contextMessages: contextMessages.map(toApiMessage),
+          attachedMediaUrls,
           child: { id: childId, name: childName, date_of_birth: childDob },
           currentDate: localDateString(),
         },
@@ -134,7 +164,19 @@ export function useChat(
         throw error;
       }
 
+      // Safety net: ensure photos land on the memory/milestone even if the
+      // deployed edge function hasn't been updated yet.
+      if (attachedMediaUrls.length > 0) {
+        await linkChatPhotosToRecentRecords(childId, attachedMediaUrls).catch((e) =>
+          console.error('[useChat] linkChatPhotosToRecentRecords failed:', e),
+        );
+      }
+
       const replyText: string = data?.content ?? "I couldn't process that, please try again.";
+      const loggedEvents = (data?.loggedEvents ?? []) as DailyEvent[];
+      if (loggedEvents.length > 0) {
+        onActivityLogged?.(loggedEvents);
+      }
       const savedAssistant = await saveChatMessage(childId, 'assistant', replyText, []);
       setMessages((prev) => [...prev, savedAssistant]);
     } catch (e) {
@@ -148,39 +190,40 @@ export function useChat(
         debounceTimerRef.current = setTimeout(() => flushBatch(), DEBOUNCE_MS);
       }
     }
-  }, [childId, childName, childDob]);
+  }, [childId, childName, childDob, onActivityLogged]);
 
   const sendMessage = useCallback(
-    async (text: string, imageUri?: string, options?: { immediate?: boolean }) => {
-      if (!childId || !childName || !childDob) return;
+    async (text: string, imageUris: string[] = [], options?: { immediate?: boolean }) => {
+      if (!childId || !childName || !childDob || !userId) return;
 
       const immediate = options?.immediate ?? false;
+      const photos = imageUris.slice(0, MAX_CHAT_PHOTOS);
 
       const tempId = `tmp-${Date.now()}-${Math.random()}`;
       const tempMsg: ChatMessage = {
         id: tempId,
         child_id: childId,
+        user_id: userId ?? '',
         role: 'user',
         content: text,
-        media_urls: imageUri ? [imageUri] : [],
+        media_urls: photos,
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempMsg]);
 
       try {
         let mediaUrls: string[] = [];
-        if (imageUri) {
-          const publicUrl = await uploadChatMedia(childId, imageUri);
-          mediaUrls = [publicUrl];
+        if (photos.length > 0) {
+          mediaUrls = await uploadChatMediaBatch(childId, photos);
         }
 
         const savedUser = await saveChatMessage(childId, 'user', text, mediaUrls);
         setMessages((prev) => prev.map((m) => (m.id === tempId ? savedUser : m)));
 
         pendingBatchRef.current.ids.push(savedUser.id);
-        if (imageUri) pendingBatchRef.current.hasPhoto = true;
+        if (photos.length > 0) pendingBatchRef.current.hasPhoto = true;
 
-        if (imageUri || immediate) {
+        if (photos.length > 0 || immediate) {
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
             debounceTimerRef.current = null;
@@ -202,30 +245,48 @@ export function useChat(
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     },
-    [childId, childName, childDob, flushBatch],
+    [childId, childName, childDob, userId, flushBatch],
   );
 
   const loadPreviousDay = useCallback(async () => {
-    if (!childId || isLoadingOlder || !hasMoreDays) return;
+    if (!childId || loadingOlderRef.current || !hasMoreDaysRef.current) return;
+
+    loadingOlderRef.current = true;
     setIsLoadingOlder(true);
+
     try {
-      const prevTs = await getOldestMsgBeforeDay(childId, oldestLoadedDayRef.current);
-      if (!prevTs) {
-        setHasMoreDays(false);
-        return;
-      }
-      const prevDay = localDateString(new Date(prevTs));
-      const older = await getChatMessagesForDay(childId, prevDay);
-      if (older.length > 0) {
-        setMessages((prev) => [...older, ...prev]);
+      let cursor = oldestLoadedDayRef.current;
+
+      // Walk backward day-by-day, skipping empty calendar days
+      for (let attempt = 0; attempt < 366; attempt++) {
+        const prevTs = await getOldestMsgBeforeDay(childId, cursor);
+        if (!prevTs) {
+          setHasMoreDays(false);
+          hasMoreDaysRef.current = false;
+          return;
+        }
+
+        const prevDay = localDateString(new Date(prevTs));
+        const older = await getChatMessagesForDay(childId, prevDay);
         oldestLoadedDayRef.current = prevDay;
+        cursor = prevDay;
+
+        if (older.length === 0) continue;
+
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          const fresh = older.filter((m) => !seen.has(m.id));
+          return fresh.length > 0 ? [...fresh, ...prev] : prev;
+        });
+        return;
       }
     } catch (e) {
       console.error('[useChat] loadPreviousDay failed:', e);
     } finally {
+      loadingOlderRef.current = false;
       setIsLoadingOlder(false);
     }
-  }, [childId, isLoadingOlder, hasMoreDays]);
+  }, [childId]);
 
   return {
     messages,

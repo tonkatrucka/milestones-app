@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Link } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
@@ -40,7 +41,9 @@ export default function ForgotPasswordScreen() {
 
     setIsLoading(true);
     setError(null);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(trimmed);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(trimmed, {
+      redirectTo: Linking.createURL('/'),
+    });
     setIsLoading(false);
     if (err) {
       setError(err.message);

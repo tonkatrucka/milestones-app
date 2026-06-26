@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -15,6 +16,7 @@ import { differenceInMinutes, format } from 'date-fns';
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { TimeSince } from '@/components/shared/TimeSince';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { EVENT_LABELS, QUICK_LOG_EMOJIS } from '@/lib/event-display';
 import type { DailyEvent, EventType } from '@/lib/database.types';
 
 const SLIDER_MAX = 500;
@@ -68,20 +70,25 @@ function AmountSlider({
   );
 }
 
-/* ── Meal tooltip (two-step: type → amount for bottle/breast) ─────── */
+/* ── Meal tooltip (two-step: type → details) ─────────────────────── */
 function MealTooltipContent({
   accent,
   borderColor,
   mutedColor,
+  inputBackground,
+  textColor,
   onLog,
 }: {
   accent: string;
   borderColor: string;
   mutedColor: string;
+  inputBackground: string;
+  textColor: string;
   onLog: (meta: Record<string, unknown>) => void;
 }) {
   const [mealType, setMealType] = useState<string | null>(null);
   const [amount, setAmount] = useState(120);
+  const [food, setFood] = useState('');
 
   // Drag-highlight state — same pattern as QuickChipGrid
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -111,13 +118,11 @@ function MealTooltipContent({
   };
 
   const needsSlider = mealType === 'breast' || mealType === 'bottle';
+  const needsFoodInput = mealType === 'solid' || mealType === 'snack';
 
   const handleChip = (v: string) => {
-    if (v === 'solid' || v === 'snack') {
-      onLog({ mealType: v });
-    } else {
-      setMealType((prev) => (prev === v ? null : v));
-    }
+    setMealType((prev) => (prev === v ? null : v));
+    setFood('');
   };
 
   return (
@@ -191,6 +196,34 @@ function MealTooltipContent({
               <Text style={tipStyles.logBtnText}>Log {amount} ml</Text>
             </Pressable>
           </View>
+        </View>
+      )}
+
+      {needsFoodInput && (
+        <View style={tipStyles.sliderSection}>
+          <Text style={[tipStyles.heading, { color: mutedColor }]}>Food</Text>
+          <TextInput
+            style={[
+              tipStyles.foodInput,
+              { backgroundColor: inputBackground, color: textColor, borderColor },
+            ]}
+            placeholder={mealType === 'snack' ? 'e.g. Banana' : 'e.g. Pureed carrot'}
+            placeholderTextColor={mutedColor}
+            value={food}
+            onChangeText={setFood}
+          />
+          <Pressable
+            style={[tipStyles.logBtn, tipStyles.logBtnPrimary, { backgroundColor: accent }]}
+            onPress={() =>
+              onLog({
+                mealType,
+                ...(food.trim() ? { food: food.trim() } : {}),
+              })
+            }>
+            <Text style={tipStyles.logBtnText}>
+              Log {mealType === 'snack' ? 'snack' : 'meal'}
+            </Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -329,17 +362,7 @@ function SleepTooltipContent({
   );
 }
 
-const EVENT_LABELS: Record<EventType, string> = {
-  nappy: 'Nappy',
-  meal: 'Meal',
-  sleep: 'Sleep',
-};
-
-const EVENT_EMOJIS: Record<EventType, string> = {
-  nappy: '👶',
-  meal: '🍼',
-  sleep: '😴',
-};
+const SLEEP_STATUS_EMOJIS = { awake: '😊', asleep: '😴' } as const;
 
 const NAPPY_TYPES = ['Wet', 'Dirty', 'Both', 'Dry'] as const;
 const MEAL_TYPES = ['Breast', 'Bottle', 'Solid', 'Snack'] as const;
@@ -435,13 +458,16 @@ function QuickChipGrid({
   );
 }
 
+import type { LayoutRect } from '@/store/log-confirmation-store';
+
 interface QuickLogCardProps {
   type: EventType;
   lastEvent: DailyEvent | null;
+  readOnly?: boolean;
   /** Called with the event's metadata (and optional custom time) when the user confirms. */
-  onLog: (metadata: Record<string, unknown>, occurredAt?: Date) => void;
+  onLog: (metadata: Record<string, unknown>, occurredAt?: Date, origin?: LayoutRect) => void;
   /** Called when the user logs a wake-up. endAt = wake time; startAt = sleep start (may be edited). */
-  onSleepWakeUp: (endAt: Date, startAt?: Date) => void;
+  onSleepWakeUp: (endAt: Date, startAt?: Date, origin?: LayoutRect) => void;
   onViewDetail: () => void;
 }
 
@@ -450,6 +476,7 @@ type CardLayout = { x: number; y: number; width: number; height: number };
 export function QuickLogCard({
   type,
   lastEvent,
+  readOnly = false,
   onLog,
   onSleepWakeUp,
   onViewDetail,
@@ -493,16 +520,26 @@ export function QuickLogCard({
 
   const closeTooltip = () => setShowTooltip(false);
 
+  const measureCardOrigin = (cb: (origin: LayoutRect) => void) => {
+    cardRef.current?.measureInWindow((x, y, width, height) => {
+      cb({ x, y, width, height });
+    });
+  };
+
   const logAndClose = (metadata: Record<string, unknown>, occurredAt?: Date) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onLog(metadata, occurredAt);
-    closeTooltip();
+    measureCardOrigin((origin) => {
+      onLog(metadata, occurredAt, origin);
+      closeTooltip();
+    });
   };
 
   const wakeUpAndClose = (startAt: Date, endAt: Date) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onSleepWakeUp(endAt, startAt);
-    closeTooltip();
+    measureCardOrigin((origin) => {
+      onSleepWakeUp(endAt, startAt, origin);
+      closeTooltip();
+    });
   };
 
   /* ── Tooltip positioning ───────────────────────────────────────── */
@@ -544,6 +581,8 @@ export function QuickLogCard({
           accent={accent}
           borderColor={colors.border}
           mutedColor={colors.muted}
+          inputBackground={colors.inputBackground}
+          textColor={colors.text}
           onLog={logAndClose}
         />
       );
@@ -569,20 +608,23 @@ export function QuickLogCard({
         ref={cardRef as RefObject<View>}
         collapsable={false}
         style={[styles.card, { backgroundColor: colors.card }]}
-        onPress={onViewDetail}
-        android_ripple={{ color: accent + '22' }}>
+        onPress={readOnly ? undefined : onViewDetail}
+        disabled={readOnly}
+        android_ripple={readOnly ? undefined : { color: accent + '22' }}>
         <View style={[styles.accentBar, { backgroundColor: accent }]} />
         <View style={styles.content}>
           {/* Emoji — sleep shows inline status badge */}
           {type === 'sleep' ? (
             <View style={styles.emojiRow}>
-              <Text style={styles.emoji}>{EVENT_EMOJIS[type]}</Text>
+              <Text style={styles.emoji}>
+                {isSleeping ? SLEEP_STATUS_EMOJIS.asleep : SLEEP_STATUS_EMOJIS.awake}
+              </Text>
               <Text style={[styles.sleepStatus, { color: isSleeping ? accent : colors.muted }]}>
                 {isSleeping ? 'Sleeping' : 'Awake'}
               </Text>
             </View>
           ) : (
-            <Text style={styles.emoji}>{EVENT_EMOJIS[type]}</Text>
+            <Text style={styles.emoji}>{QUICK_LOG_EMOJIS[type]}</Text>
           )}
           <Text style={[styles.label, { color: colors.text, fontFamily: Fonts!.rounded }]}>
             {EVENT_LABELS[type]}
@@ -608,14 +650,16 @@ export function QuickLogCard({
               <Text style={[styles.since, { color: colors.muted }]}>No logs yet</Text>
             )}
           </View>
-          <Pressable
-            ref={logBtnRef as RefObject<View>}
-            collapsable={false}
-            style={[styles.logButton, { backgroundColor: accent }]}
-            onPress={openTooltip}
-            hitSlop={4}>
-            <Text style={styles.logButtonText}>+ Log</Text>
-          </Pressable>
+          {!readOnly && (
+            <Pressable
+              ref={logBtnRef as RefObject<View>}
+              collapsable={false}
+              style={[styles.logButton, { backgroundColor: accent }]}
+              onPress={openTooltip}
+              hitSlop={4}>
+              <Text style={styles.logButtonText}>+ Log</Text>
+            </Pressable>
+          )}
         </View>
       </Pressable>
 
@@ -835,6 +879,13 @@ const tipStyles = StyleSheet.create({
   sliderSection: {
     gap: Spacing.sm,
     paddingTop: Spacing.xs,
+  },
+  foodInput: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    fontSize: 14,
   },
   sliderRow: {
     flexDirection: 'row',

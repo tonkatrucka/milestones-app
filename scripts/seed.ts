@@ -35,6 +35,9 @@ if (!SERVICE_ROLE_KEY) {
 const TEST_EMAIL = 'test@milestones.app';
 const TEST_PASSWORD = 'Test1234!';
 
+const CAREGIVER_EMAIL = 'caregiver@milestones.app';
+const CAREGIVER_PASSWORD = 'Test1234!';
+
 const CHILD = {
   name: 'Zachary',
   date_of_birth: '2024-07-28', // ~22 months old as of June 2026
@@ -58,6 +61,25 @@ function ts(daysBack: number, hours: number, minutes = 0): string {
 
 function pick<T>(arr: T[], i: number): T {
   return arr[i % arr.length];
+}
+
+async function resolveUser(email: string, password: string): Promise<string> {
+  const { data: { users: allUsers }, error: listErr } =
+    await admin.auth.admin.listUsers({ perPage: 1000 });
+  if (listErr) throw new Error(`listUsers: ${listErr.message}`);
+
+  const existing = allUsers.find((u) => u.email === email);
+  if (existing) {
+    return existing.id;
+  }
+
+  const { data: { user }, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (error || !user) throw new Error(`createUser(${email}): ${error?.message}`);
+  return user.id;
 }
 
 // ─── Event generators ────────────────────────────────────────────────────────
@@ -411,27 +433,10 @@ async function seed() {
 
   // ── Step 1: User ──────────────────────────────────────────────────────────
   console.log(`👤  Resolving user ${TEST_EMAIL} …`);
-
-  const { data: { users: allUsers }, error: listErr } =
-    await admin.auth.admin.listUsers({ perPage: 1000 });
-  if (listErr) throw new Error(`listUsers: ${listErr.message}`);
-
-  const existing = allUsers.find(u => u.email === TEST_EMAIL);
-  let userId: string;
-
-  if (existing) {
-    userId = existing.id;
-    console.log(`    ↩  Already exists — reusing ${userId}`);
-  } else {
-    const { data: { user }, error } = await admin.auth.admin.createUser({
-      email: TEST_EMAIL,
-      password: TEST_PASSWORD,
-      email_confirm: true,
-    });
-    if (error || !user) throw new Error(`createUser: ${error?.message}`);
-    userId = user.id;
-    console.log(`    ✓  Created ${userId}`);
-  }
+  const { data: { users: usersBefore } } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const hadOwner = usersBefore.some((u) => u.email === TEST_EMAIL);
+  const userId = await resolveUser(TEST_EMAIL, TEST_PASSWORD);
+  console.log(`    ${hadOwner ? '↩  Already exists' : '✓  Created'} — ${userId}`);
 
   // ── Step 2: Child ─────────────────────────────────────────────────────────
   console.log(`\n👶  Resolving child "${CHILD.name}" …`);
@@ -521,15 +526,32 @@ async function seed() {
   if (insertMilestonesErr) throw new Error(`insertMilestones: ${insertMilestonesErr.message}`);
   console.log(`    ✓  Inserted ${ms.length} milestones`);
 
+  // ── Step 5: Caregiver test account ────────────────────────────────────────
+  console.log(`\n👥  Resolving caregiver ${CAREGIVER_EMAIL} …`);
+  const hadCaregiver = usersBefore.some((u) => u.email === CAREGIVER_EMAIL);
+  const caregiverId = await resolveUser(CAREGIVER_EMAIL, CAREGIVER_PASSWORD);
+  console.log(`    ${hadCaregiver ? '↩  Already exists' : '✓  Created'} — ${caregiverId}`);
+
+  const { error: caregiverMemberErr } = await admin
+    .from('child_members')
+    .upsert(
+      { child_id: childId, user_id: caregiverId, role: 'caregiver' },
+      { onConflict: 'child_id,user_id' },
+    );
+  if (caregiverMemberErr) throw new Error(`upsertCaregiverMember: ${caregiverMemberErr.message}`);
+  console.log(`    ✓  Linked to ${CHILD.name} as caregiver`);
+
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(44));
   console.log('✅  Seed complete!');
   console.log('─'.repeat(44));
-  console.log(`  Email     : ${TEST_EMAIL}`);
-  console.log(`  Password  : ${TEST_PASSWORD}`);
-  console.log(`  Child     : ${CHILD.name}  (DOB ${CHILD.date_of_birth})`);
-  console.log(`  Events    : ${allEvents.length}`);
-  console.log(`  Milestones: ${ms.length}`);
+  console.log(`  Owner email    : ${TEST_EMAIL}`);
+  console.log(`  Owner password : ${TEST_PASSWORD}`);
+  console.log(`  Caregiver email: ${CAREGIVER_EMAIL}`);
+  console.log(`  Caregiver pass : ${CAREGIVER_PASSWORD}`);
+  console.log(`  Child          : ${CHILD.name}  (DOB ${CHILD.date_of_birth})`);
+  console.log(`  Events         : ${allEvents.length}`);
+  console.log(`  Milestones     : ${ms.length}`);
   console.log('─'.repeat(44) + '\n');
 }
 

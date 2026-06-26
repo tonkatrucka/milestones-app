@@ -1,105 +1,101 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { format, differenceInMinutes } from 'date-fns';
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { DailyEvent, EventType, NappyMetadata, MealMetadata, SleepMetadata } from '@/lib/database.types';
+import { EVENT_EMOJIS, EVENT_LABELS, formatEventTime, getEventDetail } from '@/lib/event-display';
+import type { DailyEvent, EventType } from '@/lib/database.types';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const EVENT_LABELS: Record<EventType, string> = { nappy: 'Nappy', meal: 'Meal', sleep: 'Sleep' };
-const EVENT_EMOJIS: Record<EventType, string> = { nappy: '🧷', meal: '🍼', sleep: '😴' };
-
-function getEventDetail(event: DailyEvent): string {
-  const meta = event.metadata as Record<string, unknown>;
-  switch (event.type) {
-    case 'nappy': {
-      const m = meta as Partial<NappyMetadata>;
-      return m.nappyType ? m.nappyType.charAt(0).toUpperCase() + m.nappyType.slice(1) : '';
-    }
-    case 'meal': {
-      const m = meta as Partial<MealMetadata>;
-      const parts: string[] = [];
-      if (m.mealType) parts.push(m.mealType.charAt(0).toUpperCase() + m.mealType.slice(1));
-      if (m.amountMl) parts.push(`${m.amountMl}ml`);
-      if (m.food) parts.push(m.food);
-      return parts.join(' · ');
-    }
-    case 'sleep': {
-      const m = meta as Partial<SleepMetadata>;
-      if (m.sleepEnd) {
-        const mins = Math.max(0, differenceInMinutes(new Date(m.sleepEnd), new Date(event.occurred_at)));
-        if (mins >= 60) return `${Math.floor(mins / 60)}h ${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`.trim();
-        return `${mins}m`;
-      }
-      return 'Ongoing';
-    }
-    default:
-      return '';
-  }
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+type ActivityDay = 'today' | 'yesterday';
 
 interface TodayFeedProps {
   events: DailyEvent[];
+  yesterdayEvents?: DailyEvent[];
   title?: string;
   emptyText?: string;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+  highlightEventId?: string;
+  forceToday?: boolean;
   onEventLongPress?: (event: DailyEvent) => void;
 }
 
 export function TodayFeed({
   events,
+  yesterdayEvents,
   title = "Today's activity",
   emptyText = 'No events logged yet today',
   collapsible = false,
   defaultCollapsed = false,
+  highlightEventId,
+  forceToday = false,
   onEventLongPress,
 }: TodayFeedProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [selectedDay, setSelectedDay] = useState<ActivityDay>('today');
 
-  // Sort ascending so the timeline reads top=oldest, bottom=most recent
-  const sorted = [...events].sort(
-    (a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime(),
+  const showDayToggle = yesterdayEvents !== undefined;
+  const activeDay = forceToday ? 'today' : selectedDay;
+  const activeEvents = showDayToggle && activeDay === 'yesterday' ? yesterdayEvents : events;
+  const activeEmptyText =
+    showDayToggle && activeDay === 'yesterday'
+      ? 'No events logged yesterday'
+      : emptyText;
+
+  const sorted = [...(activeEvents ?? [])].sort(
+    (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
   );
 
   return (
     <View style={styles.container}>
-      {/* Heading row — tappable when collapsible */}
-      <Pressable
-        style={styles.headingRow}
-        onPress={collapsible ? () => setCollapsed((v) => !v) : undefined}
-        disabled={!collapsible}>
-        <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-          {title}
-        </Text>
-        {collapsible && (
-          <Ionicons
-            name={collapsed ? 'chevron-down' : 'chevron-up'}
-            size={16}
-            color={colors.muted}
-          />
-        )}
-      </Pressable>
+      {showDayToggle ? (
+        <DayToggle
+          selected={activeDay}
+          onSelect={forceToday ? () => {} : setSelectedDay}
+          colors={colors}
+        />
+      ) : (
+        <Pressable
+          style={styles.headingRow}
+          onPress={collapsible ? () => setCollapsed((v) => !v) : undefined}
+          disabled={!collapsible}>
+          <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            {title}
+          </Text>
+          {collapsible && (
+            <Ionicons
+              name={collapsed ? 'chevron-down' : 'chevron-up'}
+              size={16}
+              color={colors.muted}
+            />
+          )}
+        </Pressable>
+      )}
 
-      {!collapsed && (
+      {(!collapsible || !collapsed) && (
         sorted.length === 0 ? (
           <View style={[styles.card, styles.emptyCard, { backgroundColor: colors.card }]}>
             <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={[styles.emptyText, { color: colors.muted }]}>{emptyText}</Text>
+            <Text style={[styles.emptyText, { color: colors.muted }]}>{activeEmptyText}</Text>
           </View>
         ) : (
           <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.recentLabel, { color: colors.muted }]}>Most Recent</Text>
             {sorted.map((event, idx) => (
               <TimelineRow
                 key={event.id}
                 event={event}
                 isLast={idx === sorted.length - 1}
+                isHighlighted={event.id === highlightEventId}
                 colors={colors}
                 onLongPress={onEventLongPress ? () => onEventLongPress(event) : undefined}
               />
@@ -111,37 +107,83 @@ export function TodayFeed({
   );
 }
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
+function DayToggle({
+  selected,
+  onSelect,
+  colors,
+}: {
+  selected: ActivityDay;
+  onSelect: (day: ActivityDay) => void;
+  colors: typeof Colors.light;
+}) {
+  const options: { key: ActivityDay; label: string }[] = [
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
+  ];
+
+  return (
+    <View style={[styles.toggleTrack, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      {options.map((opt) => {
+        const active = selected === opt.key;
+        return (
+          <Pressable
+            key={opt.key}
+            style={[styles.toggleOption, active && { backgroundColor: colors.elevated }]}
+            onPress={() => onSelect(opt.key)}>
+            <Text
+              style={[
+                styles.toggleLabel,
+                { color: active ? colors.text : colors.muted },
+                active && styles.toggleLabelActive,
+              ]}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function TimelineRow({
   event,
   isLast,
+  isHighlighted,
   colors,
   onLongPress,
 }: {
   event: DailyEvent;
   isLast: boolean;
+  isHighlighted: boolean;
   colors: typeof Colors.light;
   onLongPress?: () => void;
 }) {
   const accent = EventColors[event.type as EventType];
   const detail = getEventDetail(event);
+  const pulse = useSharedValue(1);
 
-  return (
+  useEffect(() => {
+    if (!isHighlighted) return;
+    pulse.value = withSequence(
+      withTiming(1.03, { duration: 180 }),
+      withTiming(1, { duration: 220 }),
+    );
+  }, [isHighlighted, pulse]);
+
+  const highlightStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
+
+  const content = (
     <Pressable
       style={styles.row}
       onLongPress={onLongPress}
       delayLongPress={400}
       android_ripple={onLongPress ? { color: accent + '22', borderless: false } : null}>
-      {/* ── Left gutter: line + dot ── */}
       <View style={styles.gutter}>
-        {!isLast && (
-          <View style={[styles.line, { backgroundColor: colors.border }]} />
-        )}
+        {!isLast && <View style={[styles.line, { backgroundColor: colors.border }]} />}
         <View style={[styles.dot, { backgroundColor: accent, borderColor: colors.card }]} />
       </View>
-
-      {/* ── Content ── */}
       <View style={[styles.content, !isLast && { borderBottomColor: colors.border }]}>
         <View style={styles.labelRow}>
           <Text style={styles.emoji}>{EVENT_EMOJIS[event.type as EventType]}</Text>
@@ -154,15 +196,21 @@ function TimelineRow({
             </View>
           ) : null}
         </View>
-        <Text style={[styles.time, { color: colors.muted }]}>
-          {format(new Date(event.occurred_at), 'h:mm a')}
-        </Text>
+        <Text style={[styles.time, { color: colors.muted }]}>{formatEventTime(event)}</Text>
       </View>
     </Pressable>
   );
-}
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+  if (isHighlighted) {
+    return (
+      <Animated.View collapsable={false} entering={FadeInDown.duration(280)}>
+        <Animated.View style={highlightStyle}>{content}</Animated.View>
+      </Animated.View>
+    );
+  }
+
+  return content;
+}
 
 const DOT_SIZE = 12;
 const GUTTER_W = 32;
@@ -180,6 +228,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  toggleTrack: {
+    flexDirection: 'row',
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 3,
+    gap: 2,
+  },
+  toggleOption: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: Radius.sm,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: Fonts!.rounded,
+  },
+  toggleLabelActive: {
+    fontWeight: '700',
+  },
   card: {
     borderRadius: Radius.lg,
     paddingLeft: Spacing.md,
@@ -193,6 +262,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 3,
   },
+  recentLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    paddingBottom: Spacing.xs,
+    paddingLeft: GUTTER_W,
+  },
   row: {
     flexDirection: 'row',
     minHeight: 48,
@@ -204,7 +281,6 @@ const styles = StyleSheet.create({
   },
   line: {
     position: 'absolute',
-    // starts just below the dot (dot sits at marginTop=18, height=12 → bottom edge at 30)
     top: (48 - DOT_SIZE) / 2 + DOT_SIZE + 2,
     bottom: 0,
     width: 2,

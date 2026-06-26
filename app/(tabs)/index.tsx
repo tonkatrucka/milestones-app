@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,14 +15,18 @@ import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
+import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { useDailyEvents } from '@/hooks/use-daily-events';
 import { QuickLogCard } from '@/components/home/QuickLogCard';
+import { LogConfirmationOverlay } from '@/components/home/LogConfirmationOverlay';
 import { TodayFeed } from '@/components/home/TodayFeed';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EditEventModal } from '@/components/events/EditEventModal';
+import { AssistantFab, AssistantQuickSheet } from '@/components/home/AssistantQuickSheet';
 import { logEvent, updateEvent } from '@/services/events';
 import type { DailyEvent, EventType } from '@/lib/database.types';
+import { useLogConfirmationStore } from '@/store/log-confirmation-store';
 import { differenceInMonths, differenceInYears } from 'date-fns';
 
 function formatAge(dob: string): string {
@@ -46,6 +50,7 @@ export default function HomeScreen() {
   const { activeChild, children, isChildrenLoading } = useActiveChild(session?.user.id ?? null);
   const setActiveChildId = useAppStore((s) => s.setActiveChildId);
   const activeChildId = useAppStore((s) => s.activeChildId);
+  const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
 
   const { todayEvents, yesterdayEvents, lastEvents, isLoading, refresh, addEvent } = useDailyEvents(activeChildId);
 
@@ -55,9 +60,38 @@ export default function HomeScreen() {
 
   const [showChildPicker, setShowChildPicker] = useState(false);
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [highlightEventId, setHighlightEventId] = useState<string | null>(null);
+
+  const feedRef = useRef<View>(null);
+  const pending = useLogConfirmationStore((s) => s.pending);
+  const confirmLog = useLogConfirmationStore((s) => s.confirmLog);
+  const setTimelineTop = useLogConfirmationStore((s) => s.setTimelineTop);
+
+  const measureTimelineTop = useCallback(() => {
+    feedRef.current?.measureInWindow((x, y, width) => {
+      setTimelineTop({ x, y, width, height: 1 });
+    });
+  }, [setTimelineTop]);
+
+  useEffect(() => {
+    if (!pending) return;
+    addEvent(pending.event);
+    setHighlightEventId(pending.event.id);
+    measureTimelineTop();
+    const timer = setTimeout(() => {
+      setHighlightEventId((current) => (current === pending.event.id ? null : current));
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [pending?.key, addEvent, measureTimelineTop]);
 
   const handleLog = useCallback(
-    async (type: EventType, metadata: Record<string, unknown>, occurredAt?: Date) => {
+    async (
+      type: EventType,
+      metadata: Record<string, unknown>,
+      occurredAt?: Date,
+      origin?: { x: number; y: number; width: number; height: number },
+    ) => {
       if (!activeChildId || !session?.user.id) return;
       try {
         const event = await logEvent({
@@ -67,27 +101,43 @@ export default function HomeScreen() {
           userId: session.user.id,
           occurredAt,
         });
-        addEvent(event);
+        confirmLog(event, origin);
       } catch {
         // Silently fail — tooltip already closed
       }
     },
-    [activeChildId, session, addEvent],
+    [activeChildId, session, confirmLog],
   );
 
-  const handleSleepWakeUp = useCallback(async (endAt: Date, startAt?: Date) => {
+  const handleSleepWakeUp = useCallback(async (
+    endAt: Date,
+    startAt?: Date,
+    origin?: { x: number; y: number; width: number; height: number },
+  ) => {
     const openSleep = lastEvents.sleep;
     if (!openSleep) return;
     const meta = openSleep.metadata as Record<string, unknown>;
     if (meta?.sleepEnd) return;
     try {
-      await updateEvent(openSleep.id, {
+      const updated = await updateEvent(openSleep.id, {
         metadata: { ...meta, sleepEnd: endAt.toISOString() },
         ...(startAt ? { occurred_at: startAt.toISOString() } : {}),
       });
+      confirmLog(updated, origin);
       refresh();
     } catch { /* ignore */ }
-  }, [lastEvents, refresh]);
+  }, [lastEvents, refresh, confirmLog]);
+
+  const handleActivityLogged = useCallback(
+    (events: DailyEvent[], origin?: { x: number; y: number; width: number; height: number }) => {
+      events.forEach((event) => addEvent(event));
+      if (events.length > 0) {
+        confirmLog(events[events.length - 1], origin);
+      }
+      refresh();
+    },
+    [addEvent, confirmLog, refresh],
+  );
 
   if (isChildrenLoading) {
     return (
@@ -115,7 +165,8 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.flex}>
       <ScrollView
         contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + Spacing.md }]}
         showsVerticalScrollIndicator={false}
@@ -139,12 +190,13 @@ export default function HomeScreen() {
 
         {/* Child picker */}
         {showChildPicker && children.length > 1 && (
-          <View style={[styles.pickerRow, { backgroundColor: colors.card }]}>
+          <View style={[styles.pickerRow, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
             {children.map((c) => (
               <Pressable
                 key={c.id}
                 style={[
                   styles.pickerChip,
+                  { backgroundColor: colors.surface },
                   c.id === activeChildId && { backgroundColor: colors.primary },
                 ]}
                 onPress={() => {
@@ -154,7 +206,7 @@ export default function HomeScreen() {
                 <Text
                   style={[
                     styles.pickerChipText,
-                    { color: c.id === activeChildId ? '#fff' : colors.text },
+                    { color: c.id === activeChildId ? colors.onPrimary : colors.text },
                   ]}>
                   {c.name}
                 </Text>
@@ -170,28 +222,23 @@ export default function HomeScreen() {
               key={type}
               type={type}
               lastEvent={lastEvents[type]}
-              onLog={(metadata, occurredAt) => handleLog(type, metadata, occurredAt)}
-              onSleepWakeUp={(endAt, startAt) => handleSleepWakeUp(endAt, startAt)}
-              onViewDetail={() => router.push(`/log/${type}` as any)}
+              readOnly={!canWrite}
+              onLog={(metadata, occurredAt, origin) => handleLog(type, metadata, occurredAt, origin)}
+              onSleepWakeUp={(endAt, startAt, origin) => handleSleepWakeUp(endAt, startAt, origin)}
+              onViewDetail={() => router.push(`/log/${type}` as never)}
             />
           ))}
         </View>
 
-        {/* Today's feed */}
-        <TodayFeed
-          events={todayEvents}
-          onEventLongPress={setEditingEvent}
-        />
-
-        {/* Yesterday's feed — collapsed by default */}
-        <TodayFeed
-          events={yesterdayEvents}
-          title="Yesterday's activity"
-          emptyText="No events logged yesterday"
-          collapsible
-          defaultCollapsed
-          onEventLongPress={setEditingEvent}
-        />
+        <View ref={feedRef} onLayout={measureTimelineTop} collapsable={false}>
+          <TodayFeed
+            events={todayEvents}
+            yesterdayEvents={yesterdayEvents}
+            highlightEventId={highlightEventId ?? undefined}
+            forceToday={!!highlightEventId}
+            onEventLongPress={canWrite ? setEditingEvent : undefined}
+          />
+        </View>
       </ScrollView>
 
       <EditEventModal
@@ -202,6 +249,23 @@ export default function HomeScreen() {
         onDeleted={() => { setEditingEvent(null); refresh(); }}
       />
     </SafeAreaView>
+
+      {!showAssistant && (
+        <AssistantFab onPress={() => setShowAssistant(true)} />
+      )}
+
+      <AssistantQuickSheet
+        visible={showAssistant}
+        onClose={() => setShowAssistant(false)}
+        childId={activeChildId}
+        childName={activeChild.name}
+        childDob={activeChild.date_of_birth}
+        canWrite={canWrite}
+        onActivityLogged={handleActivityLogged}
+      />
+
+      <LogConfirmationOverlay />
+    </View>
   );
 }
 
@@ -230,12 +294,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.md,
     borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   pickerChip: {
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 6,
-    backgroundColor: '#88888822',
   },
   pickerChipText: {
     fontSize: 14,

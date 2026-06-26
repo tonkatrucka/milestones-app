@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,12 +19,11 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          borderTopWidth: 0,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.border,
           elevation: 0,
           shadowOpacity: 0,
-          // Explicit background prevents the tab bar from being drawn as
-          // transparent over scroll content on edge-to-edge Android.
-          backgroundColor: colors.card,
+          backgroundColor: colors.elevated,
         },
       }}>
       <Tabs.Screen
@@ -32,6 +32,15 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="activities"
+        options={{
+          title: 'Activities',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -45,20 +54,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="milestones"
+        name="insights"
         options={{
-          title: 'Milestones',
+          title: 'Insights',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'star' : 'star-outline'} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="memories"
-        options={{
-          title: 'Memories',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'images' : 'images-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'bulb' : 'bulb-outline'} size={24} color={color} />
           ),
         }}
       />
@@ -68,19 +68,6 @@ export default function TabLayout() {
           title: 'Settings',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'cog' : 'cog-outline'} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: 'Assistant',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
-              size={24}
-              color={color}
-            />
           ),
         }}
       />

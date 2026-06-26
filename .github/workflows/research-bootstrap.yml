@@ -1,0 +1,32 @@
+name: Research one-time bootstrap
+
+# Fills the research bank (~1,050 bullets). Run once after deploy, then rely on
+# research-cron-weekly.yml and research-cron-hygiene.yml for ongoing maintenance.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Bootstrap all packs (42 × 3 clusters)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          for pack in $(seq 0 41); do
+            for cluster in 0 1 2; do
+              echo "▶ pack $((pack + 1))/42, cluster $((cluster + 1))/3"
+              curl -sS -f -X POST "$SUPABASE_URL/functions/v1/research-refresh" \
+                -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+                -H "x-cron-secret: $CRON_SECRET" \
+                -H "Content-Type: application/json" \
+                -d "{\"mode\":\"bootstrap\",\"offset\":$pack,\"limit\":1,\"clusterIndex\":$cluster}"
+              sleep 2
+            done
+          done
+          echo "Bootstrap complete."

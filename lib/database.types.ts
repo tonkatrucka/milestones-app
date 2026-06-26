@@ -74,10 +74,62 @@ export interface Memory {
 export interface ChatMessage {
   id: string;
   child_id: string;
+  user_id: string;
   role: 'user' | 'assistant';
   content: string;
   media_urls: string[];
   created_at: string;
+}
+
+export type ResearchAgeBracket =
+  | 'newborn'
+  | 'infant_early'
+  | 'infant'
+  | 'infant_late'
+  | 'toddler_early'
+  | 'toddler'
+  | 'toddler_late';
+
+export type ResearchCategory =
+  | 'sleep'
+  | 'feeding'
+  | 'development'
+  | 'milestones'
+  | 'regression'
+  | 'language';
+
+export interface ResearchBulletRow {
+  id: string;
+  age_bracket: ResearchAgeBracket;
+  category: ResearchCategory;
+  subtopic: string;
+  text: string;
+  source_url: string;
+  source_name: string;
+  source_domain: string;
+  source_tier: 'tier_1' | 'tier_2' | 'tier_3a' | 'tier_3b';
+  source_region: 'UK' | 'US' | 'AU' | 'CA' | 'GLOBAL';
+  content_hash: string;
+  created_at: string;
+  reviewed_at: string;
+  superseded_by_id: string | null;
+  active: boolean;
+}
+
+export interface ChildInsights {
+  child_id: string;
+  insight_date: string;
+  short_insights: string[] | null;
+  long_insights: string[] | null;
+  categories: string[];
+  selected_research_by_region: Record<string, string[]>;
+  generated_at: string;
+}
+
+export interface ChildResearchShown {
+  child_id: string;
+  bullet_id: string;
+  first_shown_on: string;
 }
 
 export interface Invite {
@@ -130,10 +182,42 @@ export interface Database {
         Insert: Omit<Invite, 'id' | 'token' | 'created_at'>;
         Update: Partial<Omit<Invite, 'id' | 'created_at'>>;
       };
+      research_bullets: {
+        Row: ResearchBulletRow;
+        Insert: Omit<ResearchBulletRow, 'id' | 'created_at' | 'reviewed_at' | 'superseded_by_id' | 'active'> & {
+          reviewed_at?: string;
+          superseded_by_id?: string | null;
+          active?: boolean;
+        };
+        Update: Partial<Omit<ResearchBulletRow, 'id' | 'created_at'>>;
+      };
+      child_insights: {
+        Row: ChildInsights;
+        Insert: Omit<ChildInsights, 'generated_at'> & { generated_at?: string };
+        Update: Partial<Omit<ChildInsights, 'child_id' | 'insight_date'>>;
+      };
+      child_research_shown: {
+        Row: ChildResearchShown;
+        Insert: ChildResearchShown;
+        Update: Partial<ChildResearchShown>;
+      };
     };
     Functions: {
       accept_invite: {
         Args: { invite_token: string };
+        Returns: void;
+      };
+      list_child_members: {
+        Args: { p_child_id: string };
+        Returns: {
+          user_id: string;
+          role: MemberRole;
+          email: string;
+          created_at: string;
+        }[];
+      };
+      update_member_role: {
+        Args: { p_child_id: string; p_user_id: string; p_role: 'caregiver' | 'viewer' };
         Returns: void;
       };
     };
