@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — Milestones</title>
+  <meta name="description" content="Privacy Policy for the Milestones baby tracking mobile application." />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f4ef;
+      --card: #ffffff;
+      --text: #2c2825;
+      --muted: #5c554d;
+      --accent: #8b6f5c;
+      --border: #e4ddd3;
+      --link: #6b4f3a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1816;
+        --card: #24211e;
+        --text: #f0ebe3;
+        --muted: #b8afa4;
+        --accent: #c9a88e;
+        --border: #3a3530;
+        --link: #e0c4ad;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+    .wrap {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    h2 {
+      font-size: 1.35rem;
+      margin: 2rem 0 0.75rem;
+      color: var(--accent);
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 1.25rem 0 0.5rem;
+    }
+    p, li { font-size: 1rem; }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: 0.35rem 0; }
+    a { color: var(--link); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+      background: var(--card);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: rgba(139, 111, 92, 0.12); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.15rem;
+      margin: 1rem 0;
+    }
+    .important {
+      border-left: 4px solid var(--accent);
+      padding-left: 1rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      background: rgba(139, 111, 92, 0.12);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Privacy Policy</h1>
+      <p class="meta"><strong>Milestones</strong> mobile application<br />
+      Effective date: <strong>26 June 2025</strong><br />
+      Last updated: <strong>26 June 2025</strong></p>
+    </header>
+
+    <p>
+      This Privacy Policy describes how <strong>Milestones</strong> (“<strong>we</strong>”, “<strong>us</strong>”, or “<strong>our</strong>”)
+      collects, uses, stores, shares, and protects information when you use the Milestones mobile application
+      (“<strong>App</strong>”) and related services (collectively, the “<strong>Service</strong>”).
+    </p>
+    <p>
+      Milestones is a baby and child journey tracking application for <strong>parents and caregivers</strong>.
+      The App is intended for use by adults. It is <strong>not</strong> directed at children to use on their own.
+      Parents and caregivers enter information about their children.
+    </p>
+    <p>
+      By creating an account or using the Service, you agree to this Privacy Policy. If you do not agree, please do not use the Service.
+    </p>
+
+    <h2>1. Who operates Milestones</h2>
+    <p>
+      Milestones is operated by the developer of the Milestones application (the “<strong>Operator</strong>”).
+      Android package name: <code>com.milestones.app</code>.
+    </p>
+    <p><strong>Privacy contact:</strong></p>
+    <ul>
+      <li>GitHub: <a href="https://github.com/tonkatrucka/milestones-app/issues">github.com/tonkatrucka/milestones-app/issues</a> (label your request “Privacy”)</li>
+      <li>Email: contact the Operator through the GitHub repository above to request a direct privacy email if needed.</li>
+    </ul>
+
+    <h2>2. Summary</h2>
+    <div class="card">
+      <ul>
+        <li><strong>We collect</strong> account credentials, child profile information you enter, care logs, photos, chat messages, and usage data needed to run the Service.</li>
+        <li><strong>We use AI</strong> (Anthropic Claude) to power the conversational assistant and daily insights. Relevant text and summaries are sent to Anthropic for processing.</li>
+        <li><strong>We host data</strong> on Supabase (database, authentication, file storage).</li>
+        <li><strong>We do not sell</strong> your personal information.</li>
+        <li><strong>We do not show ads</strong> in the App and do not use third-party advertising or analytics SDKs in the App.</li>
+        <li><strong>Family sharing:</strong> owners may invite other adults as caregivers or viewers for a child profile.</li>
+        <li><strong>Photos you upload</strong> are stored in cloud storage buckets configured for public read access via URL. Treat shared links accordingly.</li>
+      </ul>
+    </div>
+
+    <h2>3. Information we collect</h2>
+    <p>We collect information in the categories below. What we collect depends on how you use the Service.</p>
+
+    <h3>3.1 Account and authentication information</h3>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Examples</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Email address</td>
+          <td>Used to register, sign in, and recover your account</td>
+          <td>You provide it at registration</td>
+        </tr>
+        <tr>
+          <td>Password</td>
+          <td>Stored using Supabase Auth security practices (we do not store plaintext passwords)</td>
+          <td>You provide it at registration</td>
+        </tr>
+        <tr>
+          <td>Authentication tokens / session data</td>
+          <td>Session tokens persisted on your device to keep you signed in</td>
+          <td>Generated when you sign in</td>
+        </tr>
+        <tr>
+          <td>User identifier</td>
+          <td>Internal UUID assigned to your account</td>
+          <td>Generated by our backend</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 Child profile information (provided by you)</h3>
+    <p>
+      When you add a child to your account, you may provide information about that child. This may constitute
+      <strong>personal information about a minor</strong>, entered by a parent or legal guardian or authorized caregiver.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Examples</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Child’s name</td>
+          <td>First name or nickname</td>
+          <td>Display throughout the App; included in AI context for personalized assistant and insights</td>
+        </tr>
+        <tr>
+          <td>Date of birth</td>
+          <td>Used to calculate age brackets and age-appropriate content</td>
+          <td>Journey, insights, research recommendations, assistant context</td>
+        </tr>
+        <tr>
+          <td>Child avatar photo</td>
+          <td>Optional profile image</td>
+          <td>Displayed in the App; stored in cloud storage</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 Care and activity logs</h3>
+    <p>You or invited caregivers may log daily care events, including:</p>
+    <ul>
+      <li><strong>Nappy / diaper changes</strong> — type (wet, dirty, both, dry), time, optional notes</li>
+      <li><strong>Meals and feeds</strong> — type (breast, bottle, solid, snack), optional amount (ml), food description, time, notes</li>
+      <li><strong>Sleep</strong> — sleep start and end times, duration, notes</li>
+      <li><strong>Metadata</strong> — structured fields stored as JSON where applicable (e.g. meal amounts)</li>
+    </ul>
+    <p>Each log is associated with a child profile and the user who created it where applicable.</p>
+
+    <h3>3.4 Milestones and memories</h3>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Examples</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Milestones</td>
+          <td>Title, description, category (language, movement, development), achievement date, optional photos</td>
+        </tr>
+        <tr>
+          <td>Memories</td>
+          <td>Title, description, date, optional tags, optional photos</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.5 Photos and media</h3>
+    <p>You may upload photos from your device camera or photo library for:</p>
+    <ul>
+      <li>Child avatars</li>
+      <li>Milestone and memory records</li>
+      <li>Chat messages to the assistant</li>
+    </ul>
+    <p>Supported formats include JPEG, PNG, WebP, and HEIC, with a per-file size limit of 10 MB on our storage backend.</p>
+    <div class="card important">
+      <p><strong>Important — public media URLs:</strong> Photos uploaded to our cloud storage are stored in buckets configured for
+      <strong>public read access</strong>. Anyone with the direct URL may be able to view the image. URLs are not broadly published
+      by us, but they are not secret links. Do not upload images you would not want someone with the link to see.</p>
+    </div>
+
+    <h3>3.6 Conversational assistant (chat)</h3>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Details</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Chat messages</td>
+          <td>Text you send to the assistant and the assistant’s replies</td>
+        </tr>
+        <tr>
+          <td>Attached photos in chat</td>
+          <td>Uploaded to cloud storage; URLs may be sent to the AI provider for image understanding</td>
+        </tr>
+        <tr>
+          <td>Per-user chat history</td>
+          <td>Chat history is scoped to your user account and child profile (not shared across all team members’ chat threads)</td>
+        </tr>
+        <tr>
+          <td>Context sent to AI</td>
+          <td>Recent messages, child name, date of birth, current date, and relevant activity summaries may be sent to Anthropic to generate responses and perform logging actions you request</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      The assistant may create or update records in your account (e.g. log a nappy change) based on your instructions.
+      Only the most recent portion of conversation context is sent to the AI provider per request (limited message window).
+    </p>
+
+    <h3>3.7 Insights and research content</h3>
+    <ul>
+      <li><strong>Daily insights</strong> — We generate short and long observations about patterns in your child’s logged activity (e.g. sleep, feeding). Generation uses aggregated statistics derived from your logs, your child’s name and age, and Anthropic’s language models. Results are cached per child per calendar day.</li>
+      <li><strong>Research bullets</strong> — The App may show educational bullet points sourced from a pre-generated research bank (government and health-authority publishers). Selection uses your child’s age bracket, activity categories, device region (see below), and novelty tracking (which bullets were previously shown). Research bullets do not contain your personal data; we store which bullet IDs were shown to each child profile.</li>
+      <li><strong>Region preference</strong> — We read your device’s region/locale code (via <code>expo-localization</code>) to prefer region-relevant research sources where available.</li>
+    </ul>
+
+    <h3>3.8 Family sharing and invitations</h3>
+    <p>If you are a child profile <strong>owner</strong>, you may:</p>
+    <ul>
+      <li>Invite other users by <strong>email address</strong> with a role of <strong>caregiver</strong> or <strong>viewer</strong></li>
+      <li>Generate invite links containing a unique token</li>
+      <li>Manage team membership and roles</li>
+    </ul>
+    <p>
+      Invited users who accept gain access to the child’s shared data according to their role.
+      <strong>Caregivers</strong> can add and edit most content; <strong>viewers</strong> have read-only access.
+      Invite records include email, role, token, expiry (7 days by default), and acceptance timestamp.
+    </p>
+
+    <h3>3.9 Information stored locally on your device</h3>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Storage</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Authentication session</td>
+          <td>AsyncStorage (via Supabase client)</td>
+          <td>Keep you signed in</td>
+        </tr>
+        <tr>
+          <td>“Remember me” email</td>
+          <td>AsyncStorage</td>
+          <td>Pre-fill login email if you opt in</td>
+        </tr>
+        <tr>
+          <td>Theme preference (light/dark/system)</td>
+          <td>AsyncStorage</td>
+          <td>UI preference</td>
+        </tr>
+        <tr>
+          <td>Pending invite token</td>
+          <td>AsyncStorage</td>
+          <td>Complete invite flow after sign-in</td>
+        </tr>
+        <tr>
+          <td>Active child selection</td>
+          <td>App state / local persistence</td>
+          <td>Remember selected child profile</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.10 Device permissions</h3>
+    <p>The App may request the following device permissions:</p>
+    <ul>
+      <li><strong>Camera</strong> — to take photos for milestones, memories, avatars, and chat attachments</li>
+      <li><strong>Photo library / media</strong> — to choose existing photos for the same purposes</li>
+      <li><strong>Microphone (Android)</strong> — declared in the Android app manifest for potential platform compatibility; <strong>the App does not currently record or transmit audio</strong> through microphone features</li>
+    </ul>
+    <p>You can deny permissions in device settings; some features will not work without them.</p>
+
+    <h3>3.11 Information we do not collect</h3>
+    <ul>
+      <li>We do not collect precise GPS / location data</li>
+      <li>We do not collect contacts from your address book</li>
+      <li>We do not use in-app advertising trackers</li>
+      <li>We do not knowingly collect information directly from children under 13 without parental involvement (see Section 9)</li>
+    </ul>
+
+    <h2>4. How we use information</h2>
+    <p>We use collected information to:</p>
+    <ol>
+      <li>Provide, operate, maintain, and improve the Service</li>
+      <li>Authenticate you and secure your account</li>
+      <li>Store and display your child profiles, logs, milestones, memories, and timelines</li>
+      <li>Enable multi-caregiver access and invitation flows</li>
+      <li>Power the AI assistant to interpret your messages, answer questions, and create records you request</li>
+      <li>Generate daily insights and select educational research content</li>
+      <li>Upload, store, and display photos you choose to attach</li>
+      <li>Share milestone cards through your device’s native share sheet when you initiate sharing</li>
+      <li>Respond to support and privacy requests</li>
+      <li>Comply with legal obligations and enforce our terms</li>
+    </ol>
+
+    <h2>5. AI processing and automated features</h2>
+    <p>
+      Milestones uses <strong>Anthropic Claude</strong> language models for the conversational assistant and for generating
+      narrative insights. When you use these features, we send relevant content to Anthropic’s API, which may include:
+    </p>
+    <ul>
+      <li>Your chat messages and recent conversation context</li>
+      <li>Child first name, date of birth / derived age, and current date</li>
+      <li>Statistical summaries of logged events (counts, durations, week-over-week comparisons)</li>
+      <li>Image URLs or image content for photos you attach in chat</li>
+    </ul>
+    <p>
+      AI outputs are generated automatically. They are intended for general informational and organizational support only.
+      <strong>They are not medical advice.</strong> Always consult a qualified health professional for medical concerns.
+    </p>
+    <p>
+      Anthropic processes data according to its own terms and privacy policy. We configure API access server-side;
+      your Anthropic API credentials are not embedded in the App distributed to users.
+    </p>
+
+    <h2>6. How we share information</h2>
+    <p>We share information only as described below:</p>
+
+    <h3>6.1 Service providers (processors)</h3>
+    <table>
+      <thead>
+        <tr><th>Provider</th><th>Role</th><th>Data shared</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Supabase, Inc.</strong></td>
+          <td>Cloud hosting — database, authentication, storage, edge functions</td>
+          <td>Account data, child profiles, logs, chat, media files, insights cache, invite records</td>
+        </tr>
+        <tr>
+          <td><strong>Anthropic, PBC</strong></td>
+          <td>AI inference for chat and insights</td>
+          <td>Message content, child context, activity summaries, and image data as described in Section 5</td>
+        </tr>
+        <tr>
+          <td><strong>Expo / EAS</strong> (development &amp; distribution infrastructure)</td>
+          <td>App build and distribution tooling for the Operator</td>
+          <td>Does not receive end-user content from normal App usage; build configuration may include public API endpoints</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>We require service providers to handle data only on our instructions and for providing their services to us.</p>
+
+    <h3>6.2 Other users you authorize</h3>
+    <p>
+      If you invite caregivers or viewers, they can access the child’s shared profile data according to their role.
+      You control invitations and can revoke access.
+    </p>
+
+    <h3>6.3 Legal and safety</h3>
+    <p>We may disclose information if required by law, regulation, legal process, or governmental request, or to protect rights, safety, and security of users, the public, or the Service.</p>
+
+    <h3>6.4 Business transfers</h3>
+    <p>If we are involved in a merger, acquisition, or asset sale, your information may be transferred as part of that transaction. We will notify you of any change in ownership or uses of your personal information.</p>
+
+    <h3>6.5 What we do not do</h3>
+    <ul>
+      <li>We do <strong>not</strong> sell your personal information</li>
+      <li>We do <strong>not</strong> share your data with advertisers</li>
+    </ul>
+
+    <h2>7. Legal bases for processing (EEA, UK, and similar jurisdictions)</h2>
+    <p>If you are in the European Economic Area, the United Kingdom, or a jurisdiction with similar requirements, we process personal data on these bases:</p>
+    <ul>
+      <li><strong>Contract</strong> — to provide the Service you request when you create an account and use features</li>
+      <li><strong>Legitimate interests</strong> — to secure the Service, prevent abuse, and improve functionality, balanced against your rights</li>
+      <li><strong>Consent</strong> — where required for optional permissions (e.g. camera/photos) or where you explicitly agree</li>
+      <li><strong>Legal obligation</strong> — where we must comply with applicable law</li>
+    </ul>
+    <p>
+      For child-related information you enter as a parent or guardian, you represent that you have authority to provide that information.
+    </p>
+
+    <h2>8. Data retention</h2>
+    <ul>
+      <li><strong>Account data</strong> — retained while your account is active</li>
+      <li><strong>Child profiles, logs, milestones, memories, chat</strong> — retained until you or an authorized user deletes them or deletes the child profile, or until account deletion</li>
+      <li><strong>Insights cache</strong> — stored per child per day; updated when regenerated</li>
+      <li><strong>Research shown history</strong> — retained to avoid repeating the same research bullets</li>
+      <li><strong>Invites</strong> — retained until accepted, revoked, expired, or deleted</li>
+      <li><strong>Backups</strong> — residual copies may persist for a limited period in backup systems</li>
+    </ul>
+    <p>
+      When records are deleted from the App, associated database rows are removed subject to our backend configuration.
+      Deleting media from records may not immediately purge all CDN or backup copies everywhere in the infrastructure.
+    </p>
+
+    <h2>9. Children’s privacy</h2>
+    <p>
+      Milestones is designed for <strong>parents and caregivers who are adults</strong>. We do not knowingly permit children to create their own accounts.
+    </p>
+    <p>
+      The Service allows adults to store information about their children (name, date of birth, photos, development and care logs).
+      If you are a parent or guardian, you are responsible for the information you enter and for inviting only trusted caregivers.
+    </p>
+    <p>
+      If you believe we have collected personal information from a child without appropriate authorization, contact us using the details in Section 1.
+      We will take steps to delete such information where required by law.
+    </p>
+    <p>
+      <strong>COPPA (United States):</strong> We do not knowingly collect personal information directly from children under 13.
+      Child-related data is provided by parents/guardians or authorized caregivers.
+    </p>
+
+    <h2>10. Security</h2>
+    <p>We implement technical and organizational measures appropriate to the nature of the data, including:</p>
+    <ul>
+      <li>HTTPS encryption in transit between the App and our servers</li>
+      <li>Authentication and row-level security policies on our database so users access only child profiles they belong to</li>
+      <li>Role-based access (owner, caregiver, viewer) for shared child data</li>
+      <li>Server-side API keys for AI services (not exposed in the client app binary for production builds configured through EAS secrets)</li>
+    </ul>
+    <p>
+      No method of transmission or storage is 100% secure. You are responsible for keeping your password confidential and for the security of your device.
+    </p>
+
+    <h2>11. International data transfers</h2>
+    <p>
+      We and our service providers may process and store information in countries other than your own, including the United States,
+      where Supabase and Anthropic may operate infrastructure. Where required, we rely on appropriate safeguards for cross-border transfers.
+    </p>
+
+    <h2>12. Your rights and choices</h2>
+    <p>Depending on your location, you may have rights to:</p>
+    <ul>
+      <li>Access the personal information we hold about you</li>
+      <li>Correct inaccurate information (many fields are editable in the App)</li>
+      <li>Delete information (delete individual records, child profiles, or request account deletion)</li>
+      <li>Export your data (contact us if you need a portable export)</li>
+      <li>Object to or restrict certain processing</li>
+      <li>Withdraw consent where processing is consent-based</li>
+      <li>Lodge a complaint with your local data protection authority</li>
+    </ul>
+
+    <h3>12.1 In-app controls</h3>
+    <ul>
+      <li>Edit child profile details in Settings</li>
+      <li>Delete individual events, milestones, memories, and chat messages where the App provides delete actions</li>
+      <li>Remove team members and revoke pending invites (owners)</li>
+      <li>Sign out to clear the active session on your device (local session data may remain until cleared)</li>
+    </ul>
+
+    <h3>12.2 Account and data deletion requests</h3>
+    <p>
+      To delete your entire account and associated data, contact us via
+      <a href="https://github.com/tonkatrucka/milestones-app/issues">GitHub Issues</a>
+      with the subject “Account deletion request” and the email address registered to your account.
+    </p>
+    <p>
+      We will verify ownership and delete or anonymize your account data within a reasonable period, subject to legal retention requirements.
+      Deleting your account removes your access to shared child profiles; child data may remain for other members unless the owner deletes the child profile.
+    </p>
+
+    <h2>13. Third-party links and research sources</h2>
+    <p>
+      The Insights feature may display links to third-party websites (e.g. NHS, CDC, WHO) for general educational content.
+      Those sites have their own privacy practices. We are not responsible for third-party websites you choose to open.
+    </p>
+
+    <h2>14. App distribution platforms</h2>
+    <p>
+      When you download the App from the Google Play Store, Apple App Store, or other platforms, those platforms may collect information
+      about you under their own privacy policies. Milestones does not control platform-level data collection.
+    </p>
+
+    <h2>15. Changes to this Privacy Policy</h2>
+    <p>
+      We may update this Privacy Policy from time to time. We will post the updated version at this URL and change the “Last updated” date.
+      If changes are material, we may provide additional notice in the App or by email where appropriate.
+      Continued use after the effective date constitutes acceptance of the updated policy.
+    </p>
+
+    <h2>16. California privacy notice (CCPA/CPRA summary)</h2>
+    <p>California residents: in the preceding 12 months we have collected the categories of personal information described in Section 3 for the business purposes in Section 4. We do not sell or share personal information for cross-context behavioral advertising. You may request access, deletion, or correction as described in Section 12.</p>
+
+    <h2>17. Contact</h2>
+    <p>
+      For privacy questions, requests, or complaints:
+    </p>
+    <ul>
+      <li><a href="https://github.com/tonkatrucka/milestones-app/issues">https://github.com/tonkatrucka/milestones-app/issues</a></li>
+    </ul>
+
+    <footer>
+      <p>© 2025 Milestones. All rights reserved.</p>
+      <p>Package: <code>com.milestones.app</code></p>
+    </footer>
+  </div>
+</body>
+</html>
