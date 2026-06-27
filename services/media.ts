@@ -1,5 +1,13 @@
 import { File } from 'expo-file-system';
+import { encodeStorageRef, storageBucketForObject, storageObjectPath } from '@/lib/media-ref';
 import { supabase } from '@/lib/supabase';
+
+const CHAT_BUCKET = 'chat-media';
+const MILESTONE_BUCKET = 'milestone-media';
+
+function opaquePath(prefix: string, ext = 'jpg'): string {
+  return `${prefix}/${crypto.randomUUID()}.${ext}`;
+}
 
 /** Read a local file URI into an ArrayBuffer — required for Supabase Storage on React Native. */
 async function readUriAsArrayBuffer(localUri: string): Promise<ArrayBuffer> {
@@ -11,15 +19,22 @@ async function uploadToBucket(
   path: string,
   localUri: string,
   mimeType: string,
+  childId: string,
   upsert = false,
 ): Promise<string> {
   const arrayBuffer = await readUriAsArrayBuffer(localUri);
 
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(path, arrayBuffer, { contentType: mimeType, upsert });
+  const { error } = await supabase.storage.from(bucket).upload(path, arrayBuffer, {
+    contentType: mimeType,
+    upsert,
+    metadata: { child_id: childId },
+  });
 
   if (error) throw error;
+
+  if (bucket === CHAT_BUCKET) {
+    return encodeStorageRef(bucket, path);
+  }
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
@@ -30,20 +45,16 @@ export async function uploadMilestoneMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-  const path = `${childId}/${filename}`;
-  return uploadToBucket('milestone-media', path, localUri, mimeType);
+  const path = opaquePath('m');
+  return uploadToBucket(MILESTONE_BUCKET, path, localUri, mimeType, childId);
 }
 
-export async function deleteMilestoneMedia(url: string): Promise<void> {
-  const urlObj = new URL(url);
-  const pathParts = urlObj.pathname.split('/milestone-media/');
-  if (pathParts.length < 2) return;
+export async function deleteMilestoneMedia(stored: string): Promise<void> {
+  const objectPath = storageObjectPath(stored);
+  if (!objectPath) return;
 
-  const { error } = await supabase.storage
-    .from('milestone-media')
-    .remove([pathParts[1]]);
-
+  const bucket = storageBucketForObject(stored);
+  const { error } = await supabase.storage.from(bucket).remove([objectPath]);
   if (error) throw error;
 }
 
@@ -52,9 +63,8 @@ export async function uploadMemoryMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-  const path = `memories/${childId}/${filename}`;
-  return uploadToBucket('milestone-media', path, localUri, mimeType);
+  const path = opaquePath('mem');
+  return uploadToBucket(MILESTONE_BUCKET, path, localUri, mimeType, childId);
 }
 
 export async function uploadChatMedia(
@@ -62,9 +72,8 @@ export async function uploadChatMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-  const path = `${childId}/${filename}`;
-  return uploadToBucket('chat-media', path, localUri, mimeType);
+  const path = opaquePath('c');
+  return uploadToBucket(CHAT_BUCKET, path, localUri, mimeType, childId);
 }
 
 export async function uploadChatMediaBatch(
@@ -78,6 +87,6 @@ export async function uploadChildAvatar(
   childId: string,
   localUri: string,
 ): Promise<string> {
-  const path = `avatars/${childId}.jpg`;
-  return uploadToBucket('milestone-media', path, localUri, 'image/jpeg', true);
+  const path = opaquePath('a');
+  return uploadToBucket(MILESTONE_BUCKET, path, localUri, 'image/jpeg', childId, true);
 }

@@ -1,4 +1,5 @@
 import type { CandidateBullet } from './research-dedup.ts';
+import { sanitizeResearchBulletText } from './research-text-sanitize.ts';
 
 export interface ModelParseDebug {
   stopReason?: string;
@@ -61,7 +62,7 @@ export function extractJsonObject(text: string): string | null {
 }
 
 function mapBullet(b: Record<string, unknown>): CandidateBullet | null {
-  const text = String(b.text ?? '').trim();
+  const text = sanitizeResearchBulletText(String(b.text ?? ''));
   const sourceUrl = String(b.sourceUrl ?? b.source_url ?? '').trim();
   if (!text || !sourceUrl) return null;
   return {

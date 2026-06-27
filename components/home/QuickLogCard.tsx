@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, type RefObject } from 'react';
 import {
+  Alert,
   Dimensions,
   Modal,
   Platform,
@@ -230,27 +231,66 @@ function MealTooltipContent({
   );
 }
 
-/* ── Sleep tooltip (pre-filled editable time) ────────────────────── */
-function TimeRow({
+/* ── Sleep tooltip (pre-filled editable date + time) ─────────────── */
+
+function mergeDate(base: Date, dateSrc: Date): Date {
+  const merged = new Date(base);
+  merged.setFullYear(dateSrc.getFullYear(), dateSrc.getMonth(), dateSrc.getDate());
+  return merged;
+}
+
+function mergeTime(base: Date, timeSrc: Date): Date {
+  const merged = new Date(base);
+  merged.setHours(timeSrc.getHours(), timeSrc.getMinutes(), 0, 0);
+  return merged;
+}
+
+type SleepPickerField = 'startDate' | 'startTime' | 'endDate' | 'endTime' | null;
+
+function DateTimeField({
   label,
   value,
   accent,
   mutedColor,
-  onPress,
+  activeDate,
+  activeTime,
+  onDatePress,
+  onTimePress,
 }: {
   label: string;
   value: Date;
   accent: string;
   mutedColor: string;
-  onPress: () => void;
+  activeDate: boolean;
+  activeTime: boolean;
+  onDatePress: () => void;
+  onTimePress: () => void;
 }) {
   return (
     <View style={tipStyles.timeRow}>
       <Text style={[tipStyles.heading, { color: mutedColor }]}>{label}</Text>
-      <Pressable style={[tipStyles.timeChip, { borderColor: accent }]} onPress={onPress}>
-        <Text style={[tipStyles.timeChipText, { color: accent }]}>{format(value, 'h:mm a')}</Text>
-        <Ionicons name="pencil-outline" size={13} color={accent} />
-      </Pressable>
+      <View style={tipStyles.dateTimeChips}>
+        <Pressable
+          style={[
+            tipStyles.timeChip,
+            { borderColor: accent },
+            activeDate && { backgroundColor: accent + '18' },
+          ]}
+          onPress={onDatePress}>
+          <Text style={[tipStyles.timeChipText, { color: accent }]}>{format(value, 'd MMM')}</Text>
+          <Ionicons name="calendar-outline" size={13} color={accent} />
+        </Pressable>
+        <Pressable
+          style={[
+            tipStyles.timeChip,
+            { borderColor: accent },
+            activeTime && { backgroundColor: accent + '18' },
+          ]}
+          onPress={onTimePress}>
+          <Text style={[tipStyles.timeChipText, { color: accent }]}>{format(value, 'h:mm a')}</Text>
+          <Ionicons name="pencil-outline" size={13} color={accent} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -270,27 +310,40 @@ function SleepTooltipContent({
   onStart: (at: Date) => void;
   onWakeUp: (startAt: Date, endAt: Date) => void;
 }) {
+  const scheme = useColorScheme() ?? 'light';
   const [startTime, setStartTime] = useState(() => sleepStart ?? new Date());
   const [endTime, setEndTime] = useState(() => new Date());
-  // Which pill's picker is open: 'start' | 'end' | null
-  const [activePicker, setActivePicker] = useState<'start' | 'end' | null>(null);
+  const [activePicker, setActivePicker] = useState<SleepPickerField>(null);
 
-  const togglePicker = (field: 'start' | 'end') =>
+  const togglePicker = (field: SleepPickerField) =>
     setActivePicker((prev) => (prev === field ? null : field));
 
-  const pickerValue = activePicker === 'start' ? startTime : endTime;
-  const onPickerChange = (_e: any, date?: Date) => {
+  const pickerValue =
+    activePicker === 'startDate' || activePicker === 'startTime' ? startTime : endTime;
+  const pickerMode = activePicker?.endsWith('Date') ? 'date' : 'time';
+
+  const onPickerChange = (_e: unknown, date?: Date) => {
     if (Platform.OS === 'android') setActivePicker(null);
-    if (!date) return;
-    if (activePicker === 'start') setStartTime(date);
-    else setEndTime(date);
+    if (!date || !activePicker) return;
+
+    if (activePicker === 'startDate') setStartTime((prev) => mergeDate(prev, date));
+    else if (activePicker === 'startTime') setStartTime((prev) => mergeTime(prev, date));
+    else if (activePicker === 'endDate') setEndTime((prev) => mergeDate(prev, date));
+    else if (activePicker === 'endTime') setEndTime((prev) => mergeTime(prev, date));
+  };
+
+  const handleWakeUp = () => {
+    if (endTime <= startTime) {
+      Alert.alert('Invalid time', 'Wake-up must be after sleep start.');
+      return;
+    }
+    onWakeUp(startTime, endTime);
   };
 
   return (
     <View style={tipStyles.inner}>
       {isSleeping ? (
         <View style={tipStyles.sleepBlock}>
-          {/* Left — live duration */}
           <View style={tipStyles.sleepDurationCol}>
             {(() => {
               const mins = Math.max(0, differenceInMinutes(endTime, startTime));
@@ -305,40 +358,48 @@ function SleepTooltipContent({
               );
             })()}
           </View>
-          {/* Right — start / end pills */}
           <View style={tipStyles.sleepTimeRows}>
-            <TimeRow
+            <DateTimeField
               label="Start"
               value={startTime}
               accent={accent}
               mutedColor={mutedColor}
-              onPress={() => togglePicker('start')}
+              activeDate={activePicker === 'startDate'}
+              activeTime={activePicker === 'startTime'}
+              onDatePress={() => togglePicker('startDate')}
+              onTimePress={() => togglePicker('startTime')}
             />
-            <TimeRow
+            <DateTimeField
               label="End"
               value={endTime}
               accent={accent}
               mutedColor={mutedColor}
-              onPress={() => togglePicker('end')}
+              activeDate={activePicker === 'endDate'}
+              activeTime={activePicker === 'endTime'}
+              onDatePress={() => togglePicker('endDate')}
+              onTimePress={() => togglePicker('endTime')}
             />
           </View>
         </View>
       ) : (
-        <TimeRow
-          label="Time"
+        <DateTimeField
+          label="Start"
           value={startTime}
           accent={accent}
           mutedColor={mutedColor}
-          onPress={() => togglePicker('start')}
+          activeDate={activePicker === 'startDate'}
+          activeTime={activePicker === 'startTime'}
+          onDatePress={() => togglePicker('startDate')}
+          onTimePress={() => togglePicker('startTime')}
         />
       )}
 
       {activePicker && (
         <DateTimePicker
           value={pickerValue}
-          mode="time"
+          mode={pickerMode}
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          themeVariant="light"
+          themeVariant={scheme}
           onChange={onPickerChange}
         />
       )}
@@ -346,7 +407,7 @@ function SleepTooltipContent({
       {isSleeping ? (
         <Pressable
           style={[tipStyles.sleepBtn, { backgroundColor: accent }]}
-          onPress={() => onWakeUp(startTime, endTime)}
+          onPress={handleWakeUp}
           android_ripple={{ color: '#fff4' }}>
           <Text style={tipStyles.sleepBtnText}>☀️  Log wake-up</Text>
         </Pressable>
@@ -848,8 +909,14 @@ const tipStyles = StyleSheet.create({
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: Spacing.sm,
+    justifyContent: 'space-between',
+    gap: Spacing.xs,
+  },
+  dateTimeChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
   },
   timeChip: {
     flexDirection: 'row',
@@ -861,7 +928,7 @@ const tipStyles = StyleSheet.create({
     paddingVertical: 5,
   },
   timeChipText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   arrow: {

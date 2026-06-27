@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { ChildAvatar } from '@/components/children/ChildAvatar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
@@ -175,16 +176,27 @@ export default function HomeScreen() {
         }>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => setShowChildPicker((v) => !v)}>
-            <Text
-              style={[styles.childName, { color: colors.text, fontFamily: Fonts!.rounded }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit>
-              {activeChild.name}'s Recent Activity
-            </Text>
-            <Text style={[styles.childAge, { color: colors.muted }]}>
-              {formatAge(activeChild.date_of_birth)}
-            </Text>
+          <Pressable
+            style={styles.headerRow}
+            onPress={() => setShowChildPicker((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={`${activeChild.name}, ${formatAge(activeChild.date_of_birth)}. Switch child`}>
+            <ChildAvatar
+              avatarUrl={activeChild.avatar_url}
+              size={56}
+              accentColor={colors.primary}
+            />
+            <View style={styles.headerText}>
+              <Text
+                style={[styles.childName, { color: colors.text, fontFamily: Fonts!.rounded }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit>
+                {activeChild.name}'s Recent Activity
+              </Text>
+              <Text style={[styles.childAge, { color: colors.muted }]}>
+                {formatAge(activeChild.date_of_birth)}
+              </Text>
+            </View>
           </Pressable>
         </View>
 
@@ -203,6 +215,11 @@ export default function HomeScreen() {
                   setActiveChildId(c.id);
                   setShowChildPicker(false);
                 }}>
+                <ChildAvatar
+                  avatarUrl={c.avatar_url}
+                  size={28}
+                  accentColor={c.id === activeChildId ? colors.onPrimary : colors.primary}
+                />
                 <Text
                   style={[
                     styles.pickerChipText,
@@ -280,6 +297,15 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+  },
   childName: {
     fontSize: 28,
     fontWeight: '800',
@@ -297,6 +323,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   pickerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 6,

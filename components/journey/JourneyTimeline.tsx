@@ -23,8 +23,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { Colors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResolvedMediaUrls } from '@/hooks/use-resolved-media-urls';
 import { parseCalendarDate } from '@/lib/calendar-date';
 import type { JourneyEntry, JourneyMonthSection } from '@/lib/timeline-sections';
 import type { Memory, Milestone, MilestoneCategory } from '@/lib/database.types';
@@ -135,8 +137,8 @@ export function JourneyTimeline({
 
   const handleFilterChange = useCallback(
     (next: FilterMode) => {
-      if (next === 'all') {
-        setFilter('all');
+      if (next === 'all' || next === 'memories') {
+        setFilter(next);
         setSubFilterOpen(null);
         return;
       }
@@ -159,7 +161,7 @@ export function JourneyTimeline({
           if (filter === 'milestones' && entry.kind === 'milestone' && category !== 'all') {
             if (entry.data.category !== category) return false;
           }
-          if (filter !== 'all' && !passesDateRange(entryDate(entry), dateRange)) return false;
+          if (!passesDateRange(entryDate(entry), dateRange)) return false;
           return true;
         });
         if (entries.length === 0) return null;
@@ -176,8 +178,11 @@ export function JourneyTimeline({
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
       }>
-      <View ref={filterBarRef} collapsable={false}>
-        <FilterTabs filter={filter} onChange={handleFilterChange} colors={colors} />
+      <View style={[styles.filterSection, { borderBottomColor: colors.border }]}>
+        <View ref={filterBarRef} collapsable={false}>
+          <FilterTabs filter={filter} onChange={handleFilterChange} colors={colors} />
+        </View>
+        <DateRangeRow range={dateRange} onChange={setDateRange} colors={colors} />
       </View>
 
       <SubFilterPopover
@@ -185,9 +190,7 @@ export function JourneyTimeline({
         anchor={popoverAnchor}
         mode={subFilterOpen}
         category={category}
-        dateRange={dateRange}
         onCategoryChange={setCategory}
-        onDateRangeChange={setDateRange}
         onDismiss={() => setSubFilterOpen(null)}
         colors={colors}
       />
@@ -249,7 +252,7 @@ function FilterTabs({
             onPress={() => onChange(tab.key)}>
             <Text style={[styles.filterTabText, { color: active ? colors.primary : colors.muted }]}>
               {tab.label}
-              {tab.key !== 'all' ? ' ▾' : ''}
+              {tab.key === 'milestones' ? ' ▾' : ''}
             </Text>
           </Pressable>
         );
@@ -263,9 +266,7 @@ function SubFilterPopover({
   anchor,
   mode,
   category,
-  dateRange,
   onCategoryChange,
-  onDateRangeChange,
   onDismiss,
   colors,
 }: {
@@ -273,13 +274,11 @@ function SubFilterPopover({
   anchor: { top: number; left: number; width: number } | null;
   mode: 'milestones' | 'memories' | null;
   category: CategoryFilter;
-  dateRange: DateRange;
   onCategoryChange: (c: CategoryFilter) => void;
-  onDateRangeChange: (r: DateRange) => void;
   onDismiss: () => void;
   colors: typeof Colors.light;
 }) {
-  if (!visible || !anchor || !mode) return null;
+  if (!visible || !anchor || mode !== 'milestones') return null;
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onDismiss}>
@@ -296,33 +295,27 @@ function SubFilterPopover({
             },
           ]}
           onPress={() => {}}>
-          {mode === 'milestones' && (
-            <>
-              <Text style={[styles.popoverLabel, { color: colors.muted }]}>Category</Text>
-              <ScrollRow>
-                {CATEGORIES.map((cat) => {
-                  const isActive = cat === category;
-                  const accent =
-                    cat === 'all' ? colors.primary : MilestoneColors[cat as MilestoneCategory];
-                  return (
-                    <FilterChip
-                      key={cat}
-                      label={
-                        cat === 'all'
-                          ? '✨ All'
-                          : `${CATEGORY_EMOJIS[cat as MilestoneCategory]} ${CATEGORY_LABELS[cat as MilestoneCategory]}`
-                      }
-                      active={isActive}
-                      accent={accent}
-                      onPress={() => onCategoryChange(cat)}
-                    />
-                  );
-                })}
-              </ScrollRow>
-            </>
-          )}
-          <Text style={[styles.popoverLabel, { color: colors.muted }]}>Date range</Text>
-          <DateRangeRow range={dateRange} onChange={onDateRangeChange} colors={colors} />
+          <Text style={[styles.popoverLabel, { color: colors.muted }]}>Category</Text>
+          <ScrollRow>
+            {CATEGORIES.map((cat) => {
+              const isActive = cat === category;
+              const accent =
+                cat === 'all' ? colors.primary : MilestoneColors[cat as MilestoneCategory];
+              return (
+                <FilterChip
+                  key={cat}
+                  label={
+                    cat === 'all'
+                      ? '✨ All'
+                      : `${CATEGORY_EMOJIS[cat as MilestoneCategory]} ${CATEGORY_LABELS[cat as MilestoneCategory]}`
+                  }
+                  active={isActive}
+                  accent={accent}
+                  onPress={() => onCategoryChange(cat)}
+                />
+              );
+            })}
+          </ScrollRow>
         </Pressable>
       </Pressable>
     </Modal>
@@ -684,6 +677,7 @@ function PhotoLightbox({
   const { width, height } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const { urls: resolvedUrls } = useResolvedMediaUrls(lightbox?.urls ?? []);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -696,6 +690,7 @@ function PhotoLightbox({
   if (!lightbox) return null;
 
   const imageHeight = Math.min(height * 0.72, width * 1.2);
+  const displayUrls = resolvedUrls.length > 0 ? resolvedUrls : lightbox.urls;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -713,7 +708,7 @@ function PhotoLightbox({
             setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width));
           }}
           style={styles.lightboxScroll}>
-          {lightbox.urls.map((uri) => (
+          {displayUrls.map((uri) => (
             <View key={uri} style={[styles.lightboxPage, { width, height: imageHeight }]}>
               <Image
                 source={{ uri }}
@@ -723,9 +718,9 @@ function PhotoLightbox({
             </View>
           ))}
         </ScrollView>
-        {lightbox.urls.length > 1 ? (
+        {displayUrls.length > 1 ? (
           <Text style={styles.lightboxCounter}>
-            {activeIndex + 1} / {lightbox.urls.length}
+            {activeIndex + 1} / {displayUrls.length}
           </Text>
         ) : null}
       </View>
@@ -752,7 +747,7 @@ function Polaroid({
       accessibilityRole="button"
       accessibilityLabel="View photo">
       <View style={[styles.polaroidImageFrame, { backgroundColor: colors.inputBackground }]}>
-        <Image source={{ uri }} style={styles.polaroidImage} contentFit="contain" />
+        <ResolvedImage stored={uri} style={styles.polaroidImage} contentFit="contain" />
       </View>
       {hasCaption ? (
         <Text style={[styles.polaroidCaption, { color: colors.muted }]} numberOfLines={2}>
@@ -985,10 +980,14 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  filterBar: {
-    flexDirection: 'row',
+  filterSection: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     marginBottom: Spacing.sm,
+    gap: Spacing.xs,
+    paddingBottom: Spacing.xs,
+  },
+  filterBar: {
+    flexDirection: 'row',
   },
   filterTab: {
     flex: 1,
@@ -1027,6 +1026,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: Spacing.xs,
   },
   filterChip: {
     borderRadius: Radius.full,

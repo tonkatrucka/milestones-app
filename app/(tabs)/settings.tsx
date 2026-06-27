@@ -17,6 +17,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { ChildAvatar } from '@/components/children/ChildAvatar';
+import { pickImage } from '@/lib/pick-image';
 import { formatDateInput, formatDobForInput, parseDateInput } from '@/lib/calendar-date';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
@@ -25,7 +27,10 @@ import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { useThemeStore, type ColorSchemePreference } from '@/store/theme-store';
 import { buildInviteUrl } from '@/lib/invite-links';
-import { updateChild } from '@/services/children';
+import { deleteChild, updateChild } from '@/services/children';
+import { deleteMilestoneMedia, uploadChildAvatar } from '@/services/media';
+import { deleteMyAccount } from '@/services/account';
+import { getErrorMessage } from '@/lib/error-message';
 import { supabase } from '@/lib/supabase';
 import {
   createInvite,
@@ -39,6 +44,7 @@ import {
   type ChildMemberWithEmail,
 } from '@/services/invites';
 import type { Child, Invite, MemberRole } from '@/lib/database.types';
+import { TransferOwnershipModal } from '@/components/settings/TransferOwnershipModal';
 
 function teamErrorMessage(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'message' in e) {
@@ -191,23 +197,39 @@ function EditChildModal({
   colors,
   onClose,
   onSaved,
+  onDeleted,
+  onTransfer,
 }: {
   child: Child | null;
   colors: typeof Colors.light;
   onClose: () => void;
   onSaved: (updated: Child) => void;
+  onDeleted: (childId: string) => void;
+  onTransfer: () => void;
 }) {
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!child) return;
     setName(child.name);
     setDob(formatDobForInput(child.date_of_birth));
+    setAvatarUri(null);
   }, [child]);
 
   if (!child) return null;
+
+  const pickAvatar = async () => {
+    const uris = await pickImage({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (uris?.[0]) setAvatarUri(uris[0]);
+  };
 
   const handleSave = async () => {
     const trimmedName = name.trim();
@@ -223,18 +245,60 @@ function EditChildModal({
 
     setIsSaving(true);
     try {
+      let avatarUrl = child.avatar_url;
+      if (avatarUri) {
+        if (child.avatar_url) {
+          try {
+            await deleteMilestoneMedia(child.avatar_url);
+          } catch {
+            // Previous avatar cleanup is best-effort
+          }
+        }
+        avatarUrl = await uploadChildAvatar(child.id, avatarUri);
+      }
+
       const updated = await updateChild(child.id, {
         name: trimmedName,
         date_of_birth: dateOfBirth,
+        avatar_url: avatarUrl,
       });
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to update child.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to update child.'));
     } finally {
       setIsSaving(false);
     }
   };
+
+  const handleDelete = () => {
+    if (!child) return;
+    Alert.alert(
+      'Delete child profile',
+      `Permanently delete ${child.name}'s profile? All logs, milestones, memories, and chat history will be removed. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await deleteChild(child.id);
+              onDeleted(child.id);
+              onClose();
+            } catch (e: unknown) {
+              Alert.alert('Error', getErrorMessage(e, 'Failed to delete child.'));
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const isBusy = isSaving || isDeleting;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -244,8 +308,20 @@ function EditChildModal({
           onPress={(e) => e.stopPropagation()}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>Edit child</Text>
           <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
-            Update name and date of birth.
+            Update photo, name, and date of birth.
           </Text>
+
+          <Pressable style={styles.avatarPicker} onPress={pickAvatar} disabled={isBusy}>
+            <ChildAvatar
+              avatarUrl={child.avatar_url}
+              localUri={avatarUri}
+              size={96}
+              accentColor={colors.primary}
+            />
+            <Text style={[styles.avatarPickerHint, { color: colors.primary }]}>
+              {child.avatar_url || avatarUri ? 'Change photo' : 'Add photo'}
+            </Text>
+          </Pressable>
 
           <Text style={[styles.modalLabel, { color: colors.muted }]}>Name</Text>
           <TextInput
@@ -274,9 +350,9 @@ function EditChildModal({
           />
 
           <Pressable
-            style={[styles.button, { backgroundColor: colors.primary }, isSaving && { opacity: 0.7 }]}
+            style={[styles.button, { backgroundColor: colors.primary }, isBusy && { opacity: 0.7 }]}
             onPress={handleSave}
-            disabled={isSaving}>
+            disabled={isBusy}>
             {isSaving ? (
               <ActivityIndicator color="#fff" />
             ) : (
@@ -284,8 +360,72 @@ function EditChildModal({
             )}
           </Pressable>
 
-          <Pressable style={styles.modalCancel} onPress={onClose}>
+          <Pressable
+            style={[styles.outlineButton, { borderColor: colors.primary }, isBusy && { opacity: 0.7 }]}
+            onPress={onTransfer}
+            disabled={isBusy}>
+            <Text style={[styles.outlineButtonText, { color: colors.primary }]}>Transfer ownership</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.dangerButton, { borderColor: colors.danger }, isBusy && { opacity: 0.7 }]}
+            onPress={handleDelete}
+            disabled={isBusy}>
+            {isDeleting ? (
+              <ActivityIndicator color={colors.danger} />
+            ) : (
+              <Text style={[styles.dangerButtonText, { color: colors.danger }]}>Delete child profile</Text>
+            )}
+          </Pressable>
+
+          <Pressable style={styles.modalCancel} onPress={onClose} disabled={isBusy}>
             <Text style={[styles.modalCancelText, { color: colors.muted }]}>Cancel</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function OwnedChildrenTransferModal({
+  ownedChildren,
+  colors,
+  onClose,
+  onSelectChild,
+}: {
+  ownedChildren: Child[];
+  colors: typeof Colors.light;
+  onClose: () => void;
+  onSelectChild: (child: Child) => void;
+}) {
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable
+          style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={(e) => e.stopPropagation()}>
+          <Text style={[styles.modalTitle, { color: colors.text }]}>Transfer ownership</Text>
+          <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
+            Transfer each profile you own before deleting your account, or choose delete account to
+            remove them permanently.
+          </Text>
+          {ownedChildren.map((child) => (
+            <Pressable
+              key={child.id}
+              style={[styles.childRow, { borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}
+              onPress={() => onSelectChild(child)}>
+              <ChildAvatar avatarUrl={child.avatar_url} size={40} accentColor={colors.primary} />
+              <View style={styles.childInfo}>
+                <Text style={[styles.childName, { color: colors.text }]}>{child.name}</Text>
+                <Text style={[styles.childDob, { color: colors.muted }]}>
+                  Born {formatDobForInput(child.date_of_birth)}
+                </Text>
+              </View>
+              <Text style={[styles.transferAction, { color: colors.primary }]}>Transfer</Text>
+            </Pressable>
+          ))}
+          <Pressable style={styles.modalCancel} onPress={onClose}>
+            <Text style={[styles.modalCancelText, { color: colors.muted }]}>Close</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -303,6 +443,7 @@ export default function SettingsScreen() {
   const { activeChild, children } = useActiveChild(session?.user.id ?? null);
   const setActiveChildId = useAppStore((s) => s.setActiveChildId);
   const patchChild = useAppStore((s) => s.patchChild);
+  const removeChild = useAppStore((s) => s.removeChild);
   const activeChildId = useAppStore((s) => s.activeChildId);
   const { isOwner, canWrite, isLoading: isRoleLoading } = useMemberRole(
     activeChildId,
@@ -319,28 +460,57 @@ export default function SettingsScreen() {
   const [isTeamSaving, setIsTeamSaving] = useState(false);
   const [editChild, setEditChild] = useState<Child | null>(null);
   const [childRoles, setChildRoles] = useState<Record<string, MemberRole>>({});
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [transferChild, setTransferChild] = useState<Child | null>(null);
+  const [accountTransferOpen, setAccountTransferOpen] = useState(false);
 
-  useEffect(() => {
+  const ownedChildren = children.filter((child) => childRoles[child.id] === 'owner');
+  const ownedChildCount = ownedChildren.length;
+
+  const refreshChildRoles = useCallback(async () => {
     if (!session?.user.id) {
       setChildRoles({});
       return;
     }
-    supabase
+    const { data, error } = await supabase
       .from('child_members')
       .select('child_id, role')
-      .eq('user_id', session.user.id)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('[Settings] child roles:', error.message);
-          return;
-        }
-        const roles: Record<string, MemberRole> = {};
-        for (const row of data ?? []) {
-          roles[row.child_id] = row.role as MemberRole;
-        }
-        setChildRoles(roles);
-      });
+      .eq('user_id', session.user.id);
+    if (error) {
+      console.error('[Settings] child roles:', error.message);
+      return;
+    }
+    const roles: Record<string, MemberRole> = {};
+    for (const row of data ?? []) {
+      roles[row.child_id] = row.role as MemberRole;
+    }
+    setChildRoles(roles);
   }, [session?.user.id]);
+
+  useEffect(() => {
+    refreshChildRoles();
+  }, [refreshChildRoles]);
+
+  const handleChildOwnershipTransferred = useCallback(
+    (childId: string) => {
+      setChildRoles((prev) => ({ ...prev, [childId]: 'caregiver' }));
+      refreshChildRoles();
+    },
+    [refreshChildRoles],
+  );
+
+  const performDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      await deleteMyAccount();
+      useAppStore.getState().reset();
+      await signOut();
+    } catch (e: unknown) {
+      Alert.alert('Error', getErrorMessage(e, 'Failed to delete account.'));
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
 
   const loadTeam = useCallback(async () => {
     if (!activeChildId || !isOwner || isRoleLoading) return;
@@ -484,6 +654,54 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    if (ownedChildCount > 0) {
+      Alert.alert(
+        'Delete account',
+        `You own ${ownedChildCount} child profile${ownedChildCount === 1 ? '' : 's'}. Transfer ownership to keep them, or delete your account and remove those profiles permanently.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Transfer ownership',
+            onPress: () => setAccountTransferOpen(true),
+          },
+          {
+            text: 'Delete everything',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Delete account and profiles',
+                `This will permanently delete ${ownedChildCount} child profile${ownedChildCount === 1 ? '' : 's'} and your account. This cannot be undone.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete everything',
+                    style: 'destructive',
+                    onPress: performDeleteAccount,
+                  },
+                ],
+              );
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete account',
+      'You will be removed from any shared profiles you have access to. Your account cannot be recovered.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: performDeleteAccount,
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + Spacing.md }]} showsVerticalScrollIndicator={false}>
@@ -542,45 +760,77 @@ export default function SettingsScreen() {
             onPress={handleSignOut}>
             <Text style={[styles.dangerButtonText, { color: colors.danger }]}>Sign out</Text>
           </Pressable>
+          <Pressable
+            style={[
+              styles.dangerButton,
+              { borderColor: colors.danger },
+              isDeletingAccount && { opacity: 0.7 },
+            ]}
+            onPress={handleDeleteAccount}
+            disabled={isDeletingAccount}>
+            {isDeletingAccount ? (
+              <ActivityIndicator color={colors.danger} />
+            ) : (
+              <Text style={[styles.dangerButtonText, { color: colors.danger }]}>Delete account</Text>
+            )}
+          </Pressable>
         </Section>
 
         <Section title="Your children" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
             {Object.values(childRoles).includes('owner')
-              ? 'Tap a child to edit their details or switch profiles.'
+              ? 'Tap a child to edit their details or switch profiles. Owners can transfer a profile to another team member.'
               : 'Tap a child to switch profiles.'}
           </Text>
           {children.map((child) => {
             const isOwner = childRoles[child.id] === 'owner';
             return (
-              <Pressable
+              <View
                 key={child.id}
                 style={[
                   styles.childRow,
                   child.id === activeChildId && { backgroundColor: colors.primary + '15' },
-                ]}
-                onPress={() => {
-                  setActiveChildId(child.id);
-                  if (isOwner) setEditChild(child);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  isOwner ? `Edit ${child.name}` : `Select ${child.name}`
-                }>
-                <Text style={styles.childEmoji}>👶</Text>
-                <View style={styles.childInfo}>
-                  <Text style={[styles.childName, { color: colors.text }]}>{child.name}</Text>
-                  <Text style={[styles.childDob, { color: colors.muted }]}>
-                    Born {formatDobForInput(child.date_of_birth)}
-                  </Text>
-                </View>
-                {child.id === activeChildId && (
-                  <Text style={[styles.activeLabel, { color: colors.primary }]}>Active</Text>
-                )}
+                ]}>
+                <Pressable
+                  style={styles.childRowMain}
+                  onPress={() => {
+                    setActiveChildId(child.id);
+                    if (isOwner) setEditChild(child);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isOwner ? `Edit ${child.name}` : `Select ${child.name}`
+                  }>
+                  <ChildAvatar
+                    avatarUrl={child.avatar_url}
+                    size={40}
+                    accentColor={colors.primary}
+                  />
+                  <View style={styles.childInfo}>
+                    <Text style={[styles.childName, { color: colors.text }]}>{child.name}</Text>
+                    <Text style={[styles.childDob, { color: colors.muted }]}>
+                      Born {formatDobForInput(child.date_of_birth)}
+                    </Text>
+                  </View>
+                  {child.id === activeChildId && (
+                    <Text style={[styles.activeLabel, { color: colors.primary }]}>Active</Text>
+                  )}
+                  {isOwner && (
+                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                  )}
+                </Pressable>
                 {isOwner && (
-                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                  <Pressable
+                    style={[styles.childTransferButton, { borderColor: colors.primary }]}
+                    onPress={() => setTransferChild(child)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Transfer ownership of ${child.name}`}>
+                    <Text style={[styles.childTransferButtonText, { color: colors.primary }]}>
+                      Transfer
+                    </Text>
+                  </Pressable>
                 )}
-              </Pressable>
+              </View>
             );
           })}
           <Pressable
@@ -754,6 +1004,38 @@ export default function SettingsScreen() {
         colors={colors}
         onClose={() => setEditChild(null)}
         onSaved={(updated) => patchChild(updated.id, updated)}
+        onDeleted={(childId) => {
+          removeChild(childId);
+          setChildRoles((prev) => {
+            const next = { ...prev };
+            delete next[childId];
+            return next;
+          });
+        }}
+        onTransfer={() => {
+          if (editChild) setTransferChild(editChild);
+          setEditChild(null);
+        }}
+      />
+
+      {accountTransferOpen && (
+        <OwnedChildrenTransferModal
+          ownedChildren={ownedChildren}
+          colors={colors}
+          onClose={() => setAccountTransferOpen(false)}
+          onSelectChild={(child) => {
+            setAccountTransferOpen(false);
+            setTransferChild(child);
+          }}
+        />
+      )}
+
+      <TransferOwnershipModal
+        child={transferChild}
+        currentUserId={session?.user.id ?? null}
+        colors={colors}
+        onClose={() => setTransferChild(null)}
+        onTransferred={handleChildOwnershipTransferred}
       />
     </SafeAreaView>
   );
@@ -846,11 +1128,37 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   childRow: {
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+  },
+  childRowMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     padding: Spacing.sm,
-    borderRadius: Radius.md,
+  },
+  avatarPicker: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  avatarPickerHint: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  childTransferButton: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  childTransferButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  transferAction: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   childEmoji: { fontSize: 28 },
   childInfo: { flex: 1 },

@@ -203,7 +203,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Remember me + Forgot password */}
+          {/* Remember email + Forgot password */}
           <View style={styles.optionsRow}>
             <Pressable
               style={styles.rememberRow}
@@ -218,7 +218,7 @@ export default function LoginScreen() {
               ]}>
                 {rememberMe && <Ionicons name="checkmark" size={13} color="#fff" />}
               </View>
-              <Text style={[styles.rememberText, { color: colors.muted }]}>Remember me</Text>
+              <Text style={[styles.rememberText, { color: colors.muted }]}>Remember Email</Text>
             </Pressable>
 
             <Link href="/(auth)/forgot-password" asChild>

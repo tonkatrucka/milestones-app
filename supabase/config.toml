@@ -7,7 +7,6 @@ site_url = "milestones://"
 additional_redirect_urls = [
   "milestones://**",
   "milestones://",
-  "exp://10.168.168.27:8081/**",
 ]
 
 [auth.email]

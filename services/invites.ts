@@ -81,6 +81,17 @@ export async function updateInviteRole(
   if (error) throw error;
 }
 
+export async function transferChildOwnership(
+  childId: string,
+  newOwnerId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('transfer_child_ownership', {
+    p_child_id: childId,
+    p_new_owner_id: newOwnerId,
+  });
+  if (error) throw error;
+}
+
 export async function removeMember(childId: string, userId: string): Promise<void> {
   const { error } = await supabase
     .from('child_members')

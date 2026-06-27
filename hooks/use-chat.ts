@@ -10,6 +10,7 @@ import {
   saveChatMessage,
 } from '@/services/chat';
 import { uploadChatMediaBatch } from '@/services/media';
+import { CHAT_API_SIGNED_URL_TTL_SEC, resolveMediaUrls } from '@/lib/media-ref';
 import {
   linkChatPhotosToRecentRecords,
   photoUrlsFromBatchMessages,
@@ -119,13 +120,24 @@ export function useChat(
       // Fetch a fresh 10-message context from DB — not the full UI-loaded history
       const context = await getRecentChatContext(childId, CONTEXT_LIMIT);
 
-      const toApiMessage = (m: ChatMessage) => {
-        if (m.media_urls.length > 0 && m.role === 'user' && batchIds.has(m.id)) {
-          const photos = m.media_urls.slice(0, MAX_CHAT_PHOTOS);
+      const batchMessages = context.filter((m) => batchIds.has(m.id));
+      const contextMessages = context.filter((m) => !batchIds.has(m.id));
+      if (batchMessages.length === 0) return;
+
+      const batchResolvedMedia = await Promise.all(
+        batchMessages.map((m) =>
+          m.media_urls.length > 0
+            ? resolveMediaUrls(m.media_urls, { ttlSec: CHAT_API_SIGNED_URL_TTL_SEC })
+            : Promise.resolve([] as string[]),
+        ),
+      );
+
+      const toApiMessage = (m: ChatMessage, resolvedPhotos: string[]) => {
+        if (resolvedPhotos.length > 0 && m.role === 'user' && batchIds.has(m.id)) {
           return {
             role: m.role as 'user' | 'assistant',
             content: [
-              ...photos.map((url) => ({
+              ...resolvedPhotos.map((url) => ({
                 type: 'image' as const,
                 source: { type: 'url' as const, url },
               })),
@@ -136,19 +148,12 @@ export function useChat(
         return { role: m.role as 'user' | 'assistant', content: m.content };
       };
 
-      // Split into actionable (current batch) vs read-only context (prior history).
-      // Only batch messages may trigger tool calls in the edge function.
-      const batchMessages = context.filter((m) => batchIds.has(m.id));
-      const contextMessages = context.filter((m) => !batchIds.has(m.id));
-
-      if (batchMessages.length === 0) return;
-
       const attachedMediaUrls = photoUrlsFromBatchMessages(batchMessages);
 
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
-          messages: batchMessages.map(toApiMessage),
-          contextMessages: contextMessages.map(toApiMessage),
+          messages: batchMessages.map((m, i) => toApiMessage(m, batchResolvedMedia[i] ?? [])),
+          contextMessages: contextMessages.map((m) => toApiMessage(m, [])),
           attachedMediaUrls,
           child: { id: childId, name: childName, date_of_birth: childDob },
           currentDate: localDateString(),

@@ -6,7 +6,7 @@ import { MAX_CHAT_PHOTOS } from '@/services/chat';
 const LINK_WINDOW_MS = 2 * 60_000;
 const BACKFILL_WINDOW_MS = 5 * 60_000;
 
-/** Collect public photo URLs from batch user chat messages. */
+/** Collect durable photo refs / URLs from batch user chat messages. */
 export function photoUrlsFromBatchMessages(
   messages: { role: string; media_urls: string[] }[],
 ): string[] {

@@ -33,6 +33,49 @@ export interface SelectedResearchBullet extends ResearchBulletRow {
 const DEFAULT_CATEGORIES = ['development', 'milestones', 'sleep'];
 const TARGET_MIN = 5;
 const TARGET_MAX = 7;
+const MIN_CATEGORY_COUNT = 2;
+
+function distinctCategories(bullets: ResearchBulletRow[]): number {
+  return new Set(bullets.map((b) => b.category)).size;
+}
+
+function ensureMinCategories(
+  picked: ResearchBulletRow[],
+  active: ResearchBulletRow[],
+  usedIds: Set<string>,
+  usedSubtopics: Set<string>,
+  categories: string[],
+  preferred: SourceRegion | 'GLOBAL',
+  shownFirstOn: Map<string, string>,
+  target: number,
+): void {
+  if (distinctCategories(picked) >= MIN_CATEGORY_COUNT) return;
+
+  const represented = new Set(picked.map((b) => b.category));
+  const categoryOrder = [
+    ...categories.filter((c) => !represented.has(c)),
+    ...DEFAULT_CATEGORIES.filter((c) => !represented.has(c)),
+    ...[...new Set(active.map((b) => b.category))].filter((c) => !represented.has(c)),
+  ];
+
+  for (const category of categoryOrder) {
+    if (distinctCategories(picked) >= MIN_CATEGORY_COUNT) break;
+    const candidates = sortCandidates(
+      active.filter((b) => b.category === category),
+      categories,
+      preferred,
+      shownFirstOn,
+    );
+    for (const b of candidates) {
+      if (picked.length >= target && distinctCategories(picked) >= MIN_CATEGORY_COUNT) break;
+      if (usedIds.has(b.id) || usedSubtopics.has(b.subtopic)) continue;
+      picked.push(b);
+      usedIds.add(b.id);
+      usedSubtopics.add(b.subtopic);
+      if (distinctCategories(picked) >= MIN_CATEGORY_COUNT) break;
+    }
+  }
+}
 
 function regionalScore(bullet: ResearchBulletRow, preferred: SourceRegion | 'GLOBAL'): number {
   if (preferred === 'GLOBAL') {
@@ -144,6 +187,17 @@ export function selectResearchBullets(input: SelectResearchInput): SelectedResea
   if (picked.length < target) {
     tryPick(sortCandidates(active, relevantCats, preferred, shownFirstOn));
   }
+
+  ensureMinCategories(
+    picked,
+    active,
+    usedIds,
+    usedSubtopics,
+    relevantCats,
+    preferred,
+    shownFirstOn,
+    target,
+  );
 
   return picked.slice(0, target).map((b) => ({
     ...b,

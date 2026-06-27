@@ -21,6 +21,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatDateInput, parseDateInput } from '@/lib/calendar-date';
 import { uploadChildAvatar } from '@/services/media';
 import { useAuth } from '@/hooks/use-auth';
+import { getErrorMessage } from '@/lib/error-message';
 
 export default function AddChildScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -66,6 +67,7 @@ export default function AddChildScreen() {
         .single();
 
       if (error) throw error;
+      if (!child) throw new Error('Child was created but could not be loaded. Please try again.');
 
       if (avatarUri) {
         try {
@@ -79,7 +81,7 @@ export default function AddChildScreen() {
       addChild({ ...child, avatar_url: avatarUrl });
       router.replace('/(tabs)');
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save child.');
+      Alert.alert('Error', getErrorMessage(e, 'Failed to save child.'));
     } finally {
       setIsLoading(false);
     }

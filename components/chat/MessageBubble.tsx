@@ -1,9 +1,9 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
-import { format, parseISO } from 'date-fns';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ChatMessage } from '@/lib/database.types';
+import { format, parseISO } from 'date-fns';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -46,9 +46,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             contentContainerStyle={styles.photoRow}
             style={photos.length === 1 ? styles.photoScrollSingle : styles.photoScrollMulti}>
             {photos.map((uri, index) => (
-              <Image
+              <ResolvedImage
                 key={`${uri}-${index}`}
-                source={{ uri }}
+                stored={uri}
                 style={photos.length === 1 ? styles.photoSingle : styles.photoThumb}
                 contentFit="cover"
               />

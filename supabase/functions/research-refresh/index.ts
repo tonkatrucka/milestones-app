@@ -7,6 +7,7 @@ import {
   type CandidateBullet,
   type StoredBullet,
 } from '../_shared/research-dedup.ts';
+import { sanitizeResearchBulletText } from '../_shared/research-text-sanitize.ts';
 import { isAuthorizedMaintenanceRequest } from '../_shared/cron-auth.ts';
 import {
   parseResearchModelResponse,
@@ -123,7 +124,7 @@ async function insertBullets(
       age_bracket,
       category,
       subtopic: candidate.subtopic,
-      text: candidate.text,
+      text: sanitizeResearchBulletText(candidate.text),
       source_url: candidate.sourceUrl,
       source_name: candidate.sourceName,
       source_domain: result.domain,
@@ -384,7 +385,7 @@ ${staleBullets.map((b) => `- [${b.subtopic}] ${b.text} (${b.source_url})`).join(
         age_bracket,
         category,
         subtopic: candidate.subtopic,
-        text: candidate.text,
+        text: sanitizeResearchBulletText(candidate.text),
         source_url: candidate.sourceUrl,
         source_name: candidate.sourceName,
         source_domain: result.domain,

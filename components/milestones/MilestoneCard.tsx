@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, differenceInMonths, differenceInYears } from 'date-fns';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { Colors, MilestoneColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -36,7 +36,7 @@ export function MilestoneCard({ milestone, childDob, onPress }: MilestoneCardPro
       onPress={onPress}
       android_ripple={{ color: accent + '22' }}>
       {firstPhoto ? (
-        <Image source={{ uri: firstPhoto }} style={styles.thumbnail} contentFit="cover" />
+        <ResolvedImage stored={firstPhoto} style={styles.thumbnail} contentFit="cover" />
       ) : (
         <View style={[styles.thumbnailPlaceholder, { backgroundColor: accent + '22' }]}>
           <Text style={styles.categoryEmoji}>

@@ -5,6 +5,7 @@ import {
   type SourceTier,
   validateSourceUrl,
 } from './research-source-policy.ts';
+import { sanitizeResearchBulletText } from './research-text-sanitize.ts';
 
 export type DedupRejectReason =
   | 'exact_dup'
@@ -123,22 +124,30 @@ export async function validateCandidate(
   ctx: DedupContext,
   options: { skipNetwork?: boolean } = {},
 ): Promise<{ ok: true; hash: string; domain: string; tier: SourceTier; region: string } | { ok: false; reason: DedupRejectReason }> {
-  const hash = await contentHash(candidate.text);
+  const cleaned: CandidateBullet = {
+    ...candidate,
+    text: sanitizeResearchBulletText(candidate.text),
+  };
+  if (!cleaned.text) {
+    return { ok: false, reason: 'bad_url' };
+  }
+
+  const hash = await contentHash(cleaned.text);
   if (ctx.existingHashes.has(hash)) {
     return { ok: false, reason: 'exact_dup' };
   }
-  if (isNearDuplicate(candidate.text, ctx.existingTexts)) {
+  if (isNearDuplicate(cleaned.text, ctx.existingTexts)) {
     return { ok: false, reason: 'near_dup' };
   }
 
-  const subtopicCount = ctx.subtopicCounts.get(candidate.subtopic) ?? 0;
+  const subtopicCount = ctx.subtopicCounts.get(cleaned.subtopic) ?? 0;
   if (subtopicCount >= MAX_PER_SUBTOPIC) {
     return { ok: false, reason: 'subtopic_saturated' };
   }
 
   const urlCheck = await validateSourceUrl(
-    candidate.sourceUrl,
-    candidate.sourceTier,
+    cleaned.sourceUrl,
+    cleaned.sourceTier,
     options,
   );
   if (!urlCheck.ok || !urlCheck.domain || !urlCheck.tier) {
@@ -161,7 +170,8 @@ export async function validateCandidate(
 }
 
 export function recordAccepted(ctx: DedupContext, bullet: CandidateBullet, hash: string): void {
-  ctx.existingTexts.push(bullet.text);
+  const cleaned = { ...bullet, text: sanitizeResearchBulletText(bullet.text) };
+  ctx.existingTexts.push(cleaned.text);
   ctx.existingHashes.add(hash);
   ctx.subtopicCounts.set(bullet.subtopic, (ctx.subtopicCounts.get(bullet.subtopic) ?? 0) + 1);
   ctx.batchTotal++;

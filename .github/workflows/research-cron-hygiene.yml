@@ -19,7 +19,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS -X POST "$SUPABASE_URL/functions/v1/research-refresh" \
+          set -euo pipefail
+          curl -sS -f -X POST "$SUPABASE_URL/functions/v1/research-refresh" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             -H "x-cron-secret: $CRON_SECRET" \
             -H "Content-Type: application/json" \

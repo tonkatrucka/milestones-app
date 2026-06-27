@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 import { format, differenceInMonths, differenceInYears } from 'date-fns';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { MilestoneColors, Fonts, Spacing, Radius } from '@/constants/theme';
 import {
   PaletteAnchors,
@@ -45,7 +45,7 @@ export function ShareCard({ milestone, child }: ShareCardProps) {
         </View>
       </View>
       {firstPhoto ? (
-        <Image source={{ uri: firstPhoto }} style={styles.photo} contentFit="cover" />
+        <ResolvedImage stored={firstPhoto} style={styles.photo} contentFit="cover" />
       ) : null}
       <View style={styles.body}>
         <Text style={[styles.title, { fontFamily: Fonts!.rounded, color: PaletteNeutralsCool.charcoal }]}>

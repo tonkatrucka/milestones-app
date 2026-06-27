@@ -89,3 +89,49 @@ Deno.test('selectResearchBullets excludes inactive bullets', () => {
   });
   assertEquals(selected.every((b) => b.id !== 'x'), true);
 });
+
+Deno.test('selectResearchBullets includes at least two categories when pool allows', () => {
+  const widePool = [
+    ...pool,
+    {
+      id: '4',
+      age_bracket: 'toddler_early',
+      category: 'feeding',
+      subtopic: 'solids',
+      text: 'Feeding guidance',
+      source_url: 'https://www.nhs.uk/d',
+      source_name: 'NHS',
+      source_domain: 'nhs.uk',
+      source_tier: 'tier_1',
+      source_region: 'UK',
+      reviewed_at: '2025-06-01',
+      created_at: '2025-06-01',
+      active: true,
+    },
+    {
+      id: '5',
+      age_bracket: 'toddler_early',
+      category: 'language',
+      subtopic: 'babbling',
+      text: 'Language guidance',
+      source_url: 'https://www.cdc.gov/e',
+      source_name: 'CDC',
+      source_domain: 'cdc.gov',
+      source_tier: 'tier_1',
+      source_region: 'US',
+      reviewed_at: '2025-06-01',
+      created_at: '2025-06-01',
+      active: true,
+    },
+  ];
+  const selected = selectResearchBullets({
+    ageBracket: 'toddler_early',
+    categories: ['sleep'],
+    userRegion: 'GB',
+    shownBulletIds: new Set(),
+    shownFirstOn: new Map(),
+    pool: widePool,
+    count: 5,
+  });
+  assertEquals(new Set(selected.map((b) => b.category)).size >= 2, true);
+});

@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
@@ -183,8 +183,8 @@ export default function MemoryDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {photos.length > 0 ? (
           <View>
-            <Image
-              source={{ uri: photos[activePhoto] }}
+            <ResolvedImage
+              stored={photos[activePhoto]}
               style={styles.heroImage}
               contentFit="cover"
             />
@@ -192,8 +192,8 @@ export default function MemoryDetailScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>
                 {photos.map((url, i) => (
                   <Pressable key={`${url}-${i}`} onPress={() => setActivePhoto(i)}>
-                    <Image
-                      source={{ uri: url }}
+                    <ResolvedImage
+                      stored={url}
                       style={[
                         styles.thumb,
                         i === activePhoto && { borderWidth: 2, borderColor: MemoryColor },
@@ -281,7 +281,7 @@ export default function MemoryDetailScreen() {
                           }
                         : undefined
                     }>
-                    <Image source={{ uri }} style={styles.photoThumb} contentFit="cover" />
+                    <ResolvedImage stored={uri} style={styles.photoThumb} contentFit="cover" />
                   </Pressable>
                 ))}
                 {canWrite && photos.length < 5 && (

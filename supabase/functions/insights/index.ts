@@ -41,9 +41,11 @@ CORE RULE — every observation must add insight, not just count:
   GOOD: "Ava's nappies stayed about the same as last week — all fairly routine."
 
 shortInsights (2–4 items):
+- **At least 2** bullets required.
+- Cover **at least 2 different categories** from your categories list — at least one insight per category (e.g. one sleep, one feeding).
 - One comparative or meaningful point per line, always personably about the child.
 - Plain words. No jargon (metric, trend, dataset, logged, prior period).
-- Skip categories where nothing meaningful changed — do not pad with bare stats.
+- If one area had little data, still include a brief honest line for that category rather than skipping it.
 
 longInsights (1–2 items):
 - Deeper week-over-week context in the same personable voice (name or she/he/they).
@@ -54,7 +56,30 @@ SHARED RULES:
 - Only use facts from the digest. Never invent events or milestones.
 - If data is thin, say so kindly about the child — do not fill space with standalone numbers.
 - No medical diagnoses. Suggest a doctor or health visitor only for clear health concerns.
-- categories: 1–3 from: sleep, feeding, development, milestones, regression, language.`;
+- categories: **2 or 3 distinct** values from: sleep, feeding, development, milestones, regression, language (never just one).`;
+
+const ALLOWED_OBSERVATION_CATEGORIES = [
+  'sleep',
+  'feeding',
+  'development',
+  'milestones',
+  'regression',
+  'language',
+] as const;
+
+const DEFAULT_OBSERVATION_CATEGORIES = ['sleep', 'development', 'milestones'];
+
+function normalizeObservationCategories(categories: string[]): string[] {
+  const valid = [...new Set(
+    categories.filter((c) => (ALLOWED_OBSERVATION_CATEGORIES as readonly string[]).includes(c)),
+  )];
+  const padded = [...valid];
+  for (const fallback of DEFAULT_OBSERVATION_CATEGORIES) {
+    if (padded.length >= 2) break;
+    if (!padded.includes(fallback)) padded.push(fallback);
+  }
+  return padded.slice(0, 3);
+}
 
 interface RequestBody {
   child: { id: string; name: string; date_of_birth: string };
@@ -110,7 +135,9 @@ function parseObservations(text: string): {
     longInsights: Array.isArray(parsed.longInsights)
       ? parsed.longInsights.map(String).slice(0, 2)
       : [],
-    categories: Array.isArray(parsed.categories) ? parsed.categories.map(String) : [],
+    categories: normalizeObservationCategories(
+      Array.isArray(parsed.categories) ? parsed.categories.map(String) : [],
+    ),
   };
 }
 
@@ -286,6 +313,8 @@ Deno.serve(async (req: Request) => {
       );
       }
     }
+
+    categories = normalizeObservationCategories(categories);
 
     let researchBullets: ResearchBulletPayload[] = [];
 

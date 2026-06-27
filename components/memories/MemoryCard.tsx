@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, parseISO } from 'date-fns';
+import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Memory } from '@/lib/database.types';
@@ -32,7 +32,11 @@ export function MemoryCard({ memory, onPress, variant = 'featured' }: MemoryCard
       onPress={onPress}
       android_ripple={{ color: MemoryColor + '22' }}>
       {photo ? (
-        <Image source={{ uri: photo }} style={isFeatured ? styles.heroPhoto : styles.thumbPhoto} contentFit="cover" />
+        <ResolvedImage
+          stored={photo}
+          style={isFeatured ? styles.heroPhoto : styles.thumbPhoto}
+          contentFit="cover"
+        />
       ) : (
         <View style={[isFeatured ? styles.heroPlaceholder : styles.thumbPlaceholder, { backgroundColor: MemoryColor + '18' }]}>
           <Text style={styles.placeholderEmoji}>{emoji}</Text>

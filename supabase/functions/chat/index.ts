@@ -556,18 +556,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Collect public URLs for any photos attached to the current batch.
-    // These are forwarded to log_milestone / log_memory so the photo is saved
-    // alongside the DB record rather than only in chat_messages.
+    if (member.role !== 'owner' && member.role !== 'caregiver') {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
+    }
+
+    // Collect durable storage refs / URLs for milestone/memory persistence.
+    // Prefer explicit attachedMediaUrls (storage refs) over signed URLs in message content.
+    const imageUrlsFromMessages = messages.flatMap((m) => {
+      if (!Array.isArray(m.content)) return [];
+      return (m.content as ContentBlock[])
+        .filter((b) => b.type === 'image')
+        .map((b) => (b as { type: 'image'; source: { type: 'url'; url: string } }).source.url);
+    });
     const batchMediaUrls: string[] = [
       ...new Set([
-        ...attachedMediaUrls,
-        ...messages.flatMap((m) => {
-          if (!Array.isArray(m.content)) return [];
-          return (m.content as ContentBlock[])
-            .filter((b) => b.type === 'image')
-            .map((b) => (b as { type: 'image'; source: { type: 'url'; url: string } }).source.url);
-        }),
+        ...(attachedMediaUrls.length > 0 ? attachedMediaUrls : imageUrlsFromMessages),
       ]),
     ].slice(0, 5);
 

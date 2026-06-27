@@ -22,7 +22,7 @@ Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activ
 
 2. Configure environment — create `.env` with your Supabase project URL and anon key (see `.env.example` if present).
 
-3. Run database migrations — apply migrations in `supabase/migrations/` in order (through `010_insights_and_research.sql` and `011_seed_research_minimal.sql`) in the Supabase SQL editor (or via `supabase db push`).
+3. Run database migrations — apply migrations in `supabase/migrations/` in order (through `017_transfer_child_ownership.sql`) in the Supabase SQL editor (or via `supabase db push`). See [Database migrations](#database-migrations) below.
 
 4. Deploy edge functions
 
@@ -58,6 +58,67 @@ Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activ
    ```bash
    npm run start:clear
    ```
+
+## Settings and team management
+
+The **Settings** tab supports:
+
+- **Child profile** — edit name, date of birth, and avatar
+- **Team** — invite caregivers/viewers, change roles, remove members, revoke pending invites
+- **Transfer ownership** — hand a child profile to another team member (owner only)
+- **Delete child profile** — removes the child and associated data (owner only)
+- **Delete account** — self-service removal of owned profiles, storage files, memberships, and auth user
+- **Theme** — system / light / dark preference
+
+Team invites use shareable deep links (`milestones://` / web fallback).
+
+## Media and storage
+
+Photos are stored in Supabase Storage with hardened access controls (migrations `014`–`015`):
+
+| Bucket | Access | Notes |
+| --- | --- | --- |
+| `chat-media` | Private — signed URLs | Chat images; team members only |
+| `milestone-media` | Public bucket, opaque paths | Memories, milestones, avatars |
+
+The app stores `storage://bucket/path` references in the database and resolves signed URLs at display time (`lib/media-ref.ts`, `ResolvedImage`, `useResolvedMediaUrls`). Legacy public URLs still work for existing uploads.
+
+Auth sessions use **expo-secure-store** (chunked on Android) via `lib/supabase-storage.ts`.
+
+## Database migrations
+
+| Migration | Purpose |
+| --- | --- |
+| `012_children_select_created_by` | Fix child visibility for creators during onboarding |
+| `013_fix_child_members_insert` | Fix team member insert policies |
+| `014_fix_storage_policies` | Restrict storage writes to owners/caregivers |
+| `015_storage_opaque_paths_and_private_chat` | Private chat bucket; opaque milestone paths |
+| `016_delete_my_account` | `delete_my_account()` RPC for self-service account removal |
+| `017_transfer_child_ownership` | `transfer_child_ownership()` RPC for profile handoff |
+
+After pulling schema changes:
+
+```bash
+npx supabase db push
+```
+
+## Deploying to testers (Android & iOS)
+
+Store builds use EAS with the `preview` profile:
+
+```powershell
+npx eas-cli@latest build --platform all --profile preview
+npx eas-cli@latest submit --platform android --profile preview --latest
+npx eas-cli@latest submit --platform ios --profile preview --latest
+```
+
+Before the first store build, push Supabase credentials to EAS:
+
+```powershell
+npm run setup:eas-secrets
+```
+
+Full step-by-step instructions (Play Internal Testing, TestFlight, Apple API keys, troubleshooting): **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
 ## Troubleshooting
 
@@ -149,17 +210,22 @@ Long-press or use the edit icon on any event in the home activity feed or journe
 app/                  Expo Router screens (tabs, memory, milestone)
 components/
   chat/               Chat bubble, input bar, quick-log chips
+  children/           Child avatar picker/display
   events/             EditEventModal (edit/delete any logged event)
   home/               QuickLogCard (tooltip), TodayFeed, SleepBox
   journey/            Timeline with sleep duration labels
+  media/              ResolvedImage (signed URL display)
   memories/           Memory card and grid
-hooks/                React hooks (use-chat, use-insights, use-memories, use-journey-timeline)
-services/             Supabase data layer (events, media, memories, insights)
+  settings/           TransferOwnershipModal
+docs/                 DEPLOYMENT.md (store builds & TestFlight)
+hooks/                React hooks (use-chat, use-insights, use-resolved-media-urls, …)
+lib/                  media-ref, supabase-storage, sanitize-research-text, …
+services/             Supabase data layer (events, media, account, invites, …)
 supabase/
   functions/chat/     Claude edge function + intent parser
   functions/insights/ Daily observation cache + research selection
   functions/research-refresh/ Research bank bootstrap, append, hygiene
-  migrations/         Database schema (001–011)
+  migrations/         Database schema (001–017)
 ```
 
 ## Learn more

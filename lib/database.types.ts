@@ -220,6 +220,14 @@ export interface Database {
         Args: { p_child_id: string; p_user_id: string; p_role: 'caregiver' | 'viewer' };
         Returns: void;
       };
+      delete_my_account: {
+        Args: Record<string, never>;
+        Returns: void;
+      };
+      transfer_child_ownership: {
+        Args: { p_child_id: string; p_new_owner_id: string };
+        Returns: void;
+      };
     };
   };
 }

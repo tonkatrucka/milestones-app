@@ -1,5 +1,6 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { extractJsonObject, parseResearchModelResponse } from './research-model-parse.ts';
+import { extractJsonObject, parseBulletsPayload, parseResearchModelResponse } from './research-model-parse.ts';
+import { sanitizeResearchBulletText } from './research-text-sanitize.ts';
 
 Deno.test('extractJsonObject handles fenced json', () => {
   const json = extractJsonObject('Here you go:\n```json\n{"bullets":[{"text":"A","sourceUrl":"https://www.nhs.uk/x"}]}\n```');
@@ -27,4 +28,25 @@ Deno.test('parseResearchModelResponse reports no_json', () => {
 
   assertEquals(result.bullets.length, 0);
   assertEquals(result.debug?.issue, 'no_json');
+});
+
+Deno.test('sanitizeResearchBulletText removes cite markup but keeps text', () => {
+  const raw =
+    '<cite index="1">Babies should sleep on their back</cite> for safer sleep.';
+  assertEquals(
+    sanitizeResearchBulletText(raw),
+    'Babies should sleep on their back for safer sleep.',
+  );
+});
+
+Deno.test('parseBulletsPayload strips cite tags from bullet text', () => {
+  const bullets = parseBulletsPayload({
+    bullets: [{
+      text: '<cite index="2">Most babies need regular naps.</cite>',
+      sourceUrl: 'https://www.nhs.uk/example',
+      sourceName: 'NHS',
+      subtopic: 'naps',
+    }],
+  });
+  assertEquals(bullets[0]?.text, 'Most babies need regular naps.');
 });

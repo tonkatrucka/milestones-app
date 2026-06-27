@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ResearchBullet } from '@/services/insights';
+import { sanitizeResearchBulletText } from '@/lib/sanitize-research-text';
 
 const CATEGORY_LABELS: Record<string, string> = {
   sleep: 'Sleep',
@@ -56,7 +57,7 @@ export function ResearchBullets({ bullets }: Props) {
               <Text style={[styles.bullet, { color: colors.primary }]}>•</Text>
               <View style={styles.bulletContent}>
                 <Text style={[styles.bulletText, { color: colors.text }]}>
-                  {b.text}
+                  {sanitizeResearchBulletText(b.text)}
                   {b.isNew && (
                     <Text style={[styles.newBadge, { color: colors.tint }]}> New</Text>
                   )}
