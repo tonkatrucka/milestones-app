@@ -20,7 +20,7 @@ import Animated, {
 import { Image } from 'expo-image';
 import { differenceInMonths, differenceInYears, format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from "expo-router/js-tabs";
 
 import { Colors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { ResolvedImage } from '@/components/media/ResolvedImage';

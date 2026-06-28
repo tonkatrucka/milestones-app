@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from "expo-router/js-tabs";
 
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -397,6 +397,13 @@ function formatEventDetail(event: DailyEvent): string {
         snack: '🍪 Snack',
       };
       const base = typeMap[m?.mealType] ?? '🍼 Meal';
+      if (m?.mealType === 'breast') {
+        const parts: string[] = [];
+        if (m.breastSide) parts.push(m.breastSide.charAt(0).toUpperCase() + m.breastSide.slice(1));
+        if (m.durationMins != null) parts.push(`${m.durationMins}m`);
+        else if (m.amountMl) parts.push(`${m.amountMl}ml`);
+        return parts.length > 0 ? `${base} · ${parts.join(' · ')}` : base;
+      }
       if (m?.amountMl) return `${base} · ${m.amountMl}ml`;
       if (m?.food) return `${base} · ${m.food}`;
       return base;
@@ -593,7 +600,19 @@ function MealTooltipBody({ events, colors }: { events: DailyEvent[]; colors: typ
       {events.map((e, idx) => {
         const meta = e.metadata as MealMetadata;
         const label = MEAL_TYPE_LABELS[meta?.mealType] ?? '🍼 Meal';
-        const detail = meta?.amountMl ? `${meta.amountMl}ml` : meta?.food ? meta.food : null;
+        const detail =
+          meta?.mealType === 'breast'
+            ? [
+                meta.breastSide ? meta.breastSide.charAt(0).toUpperCase() + meta.breastSide.slice(1) : null,
+                meta.durationMins != null ? `${meta.durationMins}m` : meta.amountMl ? `${meta.amountMl}ml` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || null
+            : meta?.amountMl
+              ? `${meta.amountMl}ml`
+              : meta?.food
+                ? meta.food
+                : null;
         const isLast = idx === events.length - 1;
         return (
           <View

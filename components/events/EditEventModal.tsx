@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { updateEvent, deleteEvent } from '@/services/events';
+import { stopSleepTimer } from '@/services/sleep-timer';
 import type {
   DailyEvent,
   EventType,
@@ -25,6 +26,8 @@ import type {
   MealMetadata,
   SleepMetadata,
 } from '@/lib/database.types';
+import { formatMealDetail } from '@/lib/meal-format';
+import { BreastFeedControls, type BreastFeedValues } from '@/components/meals/BreastFeedControls';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,11 +66,7 @@ function eventSummary(event: DailyEvent): string {
     }
     case 'meal': {
       const m = meta as MealMetadata;
-      const parts: string[] = [];
-      if (m.mealType) parts.push(m.mealType.charAt(0).toUpperCase() + m.mealType.slice(1));
-      if (m.amountMl) parts.push(`${m.amountMl}ml`);
-      if (m.food) parts.push(m.food);
-      return parts.join(' · ') || 'Meal';
+      return formatMealDetail(m) || 'Meal';
     }
     case 'sleep': {
       const m = meta as SleepMetadata;
@@ -159,6 +158,12 @@ export function EditEventModal({
   const [mealType, setMealType] = useState<MealMetadata['mealType']>('bottle');
   const [amount, setAmount] = useState('');
   const [food, setFood] = useState('');
+  const [breastValues, setBreastValues] = useState<BreastFeedValues>({
+    side: null,
+    mode: 'duration',
+    durationMins: 10,
+    amountMl: 120,
+  });
   const [sleepStart, setSleepStart] = useState(new Date());
   const [sleepEnd, setSleepEnd] = useState(new Date());
   const [hasSleepEnd, setHasSleepEnd] = useState(false);
@@ -181,6 +186,12 @@ export function EditEventModal({
       setMealType(m.mealType ?? 'bottle');
       setAmount(m.amountMl != null ? String(m.amountMl) : '');
       setFood(m.food ?? '');
+      setBreastValues({
+        side: m.breastSide ?? null,
+        mode: m.durationMins != null ? 'duration' : m.amountMl != null ? 'amount' : 'duration',
+        durationMins: m.durationMins ?? 10,
+        amountMl: m.amountMl ?? 120,
+      });
     } else if (event.type === 'sleep') {
       setSleepStart(occurred);
       const sleepMeta = event.metadata as SleepMetadata;
@@ -222,10 +233,16 @@ export function EditEventModal({
           metadata = { nappyType } as NappyMetadata;
         } else {
           const m: Record<string, unknown> = { mealType };
-          if (mealType === 'bottle' || mealType === 'breast') {
+          if (mealType === 'bottle') {
             if (amount) m.amountMl = parseInt(amount, 10);
-          }
-          if (mealType === 'solid' || mealType === 'snack') {
+          } else if (mealType === 'breast') {
+            if (breastValues.side) m.breastSide = breastValues.side;
+            if (breastValues.mode === 'duration' && breastValues.durationMins > 0) {
+              m.durationMins = breastValues.durationMins;
+            } else if (breastValues.mode === 'amount' && breastValues.amountMl > 0) {
+              m.amountMl = breastValues.amountMl;
+            }
+          } else if (mealType === 'solid' || mealType === 'snack') {
             if (food) m.food = food;
           }
           metadata = m as MealMetadata;
@@ -237,6 +254,9 @@ export function EditEventModal({
         metadata,
         notes: notes.trim() || null,
       });
+      if (event.type === 'sleep' && hasSleepEnd) {
+        await stopSleepTimer();
+      }
       onSaved(updated);
       onClose();
     } catch (e) {
@@ -259,6 +279,9 @@ export function EditEventModal({
             setIsDeleting(true);
             try {
               await deleteEvent(event.id);
+              if (event.type === 'sleep') {
+                await stopSleepTimer();
+              }
               onDeleted(event.id);
               onClose();
             } catch (e) {
@@ -441,7 +464,7 @@ export function EditEventModal({
                           ))}
                         </View>
                       </View>
-                      {(mealType === 'bottle' || mealType === 'breast') && (
+                      {(mealType === 'bottle') && (
                         <View>
                           <Text style={[modalStyles.fieldLabel, { color: colors.muted }]}>Amount (ml)</Text>
                           <TextInput
@@ -453,6 +476,21 @@ export function EditEventModal({
                             keyboardType="numeric"
                           />
                         </View>
+                      )}
+                      {mealType === 'breast' && (
+                        <BreastFeedControls
+                          accent={accent}
+                          borderColor={colors.border}
+                          mutedColor={colors.muted}
+                          inputBackground={colors.inputBackground}
+                          textColor={colors.text}
+                          childId={event.child_id}
+                          occurredAt={time}
+                          enableTimer={false}
+                          showLogActions={false}
+                          values={breastValues}
+                          onValuesChange={setBreastValues}
+                        />
                       )}
                       {(mealType === 'solid' || mealType === 'snack') && (
                         <View>

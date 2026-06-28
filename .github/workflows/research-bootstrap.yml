@@ -18,6 +18,14 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
+          missing=()
+          [[ -z "$SUPABASE_URL" ]] && missing+=(SUPABASE_URL)
+          [[ -z "$SUPABASE_SERVICE_ROLE_KEY" ]] && missing+=(SUPABASE_SERVICE_ROLE_KEY)
+          [[ -z "$CRON_SECRET" ]] && missing+=(CRON_SECRET)
+          if ((${#missing[@]})); then
+            echo "::error::Missing repository secrets: ${missing[*]}. Run: npm run setup:github-secrets"
+            exit 1
+          fi
           for pack in $(seq 0 41); do
             for cluster in 0 1 2; do
               echo "▶ pack $((pack + 1))/42, cluster $((cluster + 1))/3"

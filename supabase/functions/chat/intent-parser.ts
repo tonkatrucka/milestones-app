@@ -13,6 +13,10 @@ export interface ParsedSimpleQuery {
     | 'meal_count_today'
     | 'milk_today'
     | 'sleep_today'
+    | 'nappy_count_yesterday'
+    | 'meal_count_yesterday'
+    | 'milk_yesterday'
+    | 'sleep_yesterday'
     | 'last_meal'
     | 'last_nappy'
     | 'last_sleep'
@@ -41,60 +45,161 @@ const COMPLEX_QUERY_PATTERNS = [
   /\b(enough|normal|should\s+(?:i|we)|worried|concern)\b/i,
 ];
 
+function parseMlAmount(lower: string): ParsedIntent | null {
+  const patterns = [
+    /^(?:(?:bottle|fed|feed|gave)\s+)?(\d+)\s*ml(?:\s+bottle)?$/,
+    /^(\d+)\s*ml$/,
+    /^bottle\s+(\d+)\s*ml?$/,
+    /^(?:fed|feed|gave)\s+(\d+)\s*ml$/,
+    /^(\d+)\s*ml\s+bottle$/,
+  ];
+  for (const pattern of patterns) {
+    const match = lower.match(pattern);
+    if (match) {
+      return {
+        toolName: 'log_meal',
+        input: { meal_type: 'bottle', amount_ml: parseInt(match[1], 10) },
+      };
+    }
+  }
+  return null;
+}
+
+function parseNappyIntent(lower: string): ParsedIntent | null {
+  if (/^(?:wet\s+)?nappy(?:\s+change)?$|^wet\s+diaper$/.test(lower)) {
+    return { toolName: 'log_nappy', input: { nappy_type: 'wet' } };
+  }
+  if (
+    /^(?:dirty|poo(?:py)?|poop(?:y)?)(?:\s+nappy|\s+diaper)?$|^soiled(?:\s+nappy)?$|^poo$/.test(
+      lower,
+    )
+  ) {
+    return { toolName: 'log_nappy', input: { nappy_type: 'dirty' } };
+  }
+  if (
+    /^(?:wet\s+(?:and|&)\s+dirty|dirty\s+(?:and|&)\s+wet|both)(?:\s+nappy|\s+diaper)?$/.test(lower)
+  ) {
+    return { toolName: 'log_nappy', input: { nappy_type: 'both' } };
+  }
+  if (/^dry(?:\s+nappy|\s+diaper)?$/.test(lower)) {
+    return { toolName: 'log_nappy', input: { nappy_type: 'dry' } };
+  }
+  return null;
+}
+
+function parseBreastIntent(lower: string): ParsedIntent | null {
+  const withSideAndDuration = lower.match(
+    /^(?:bf|breast(?:feed|fed)?|nursing|nursed)\s+(left|right|both)\s+(\d+)\s*(?:m|min|mins|minutes?)$/,
+  );
+  if (withSideAndDuration) {
+    return {
+      toolName: 'log_meal',
+      input: {
+        meal_type: 'breast',
+        breast_side: withSideAndDuration[1],
+        duration_mins: parseInt(withSideAndDuration[2], 10),
+      },
+    };
+  }
+
+  const sideFirst = lower.match(
+    /^(left|right|both)\s+(?:bf|breast(?:feed)?)\s+(\d+)\s*(?:m|min|mins|minutes?)$/,
+  );
+  if (sideFirst) {
+    return {
+      toolName: 'log_meal',
+      input: {
+        meal_type: 'breast',
+        breast_side: sideFirst[1],
+        duration_mins: parseInt(sideFirst[2], 10),
+      },
+    };
+  }
+
+  const durationOnly = lower.match(
+    /^(?:bf|breast(?:feed|fed)?|nursing|nursed)\s+(\d+)\s*(?:m|min|mins|minutes?)$/,
+  );
+  if (durationOnly) {
+    return {
+      toolName: 'log_meal',
+      input: {
+        meal_type: 'breast',
+        duration_mins: parseInt(durationOnly[1], 10),
+      },
+    };
+  }
+
+  const sideOnly = lower.match(/^(?:bf|breast(?:feed|fed)?|nursing|nursed)\s+(left|right|both)$/);
+  if (sideOnly) {
+    return {
+      toolName: 'log_meal',
+      input: { meal_type: 'breast', breast_side: sideOnly[1] },
+    };
+  }
+
+  return null;
+}
+
+function parseMealIntent(lower: string): ParsedIntent | null {
+  const breast = parseBreastIntent(lower);
+  if (breast) return breast;
+
+  if (/^(?:breast(?:fed|feed)?|bf|nursing|nursed)$/.test(lower)) {
+    return { toolName: 'log_meal', input: { meal_type: 'breast' } };
+  }
+  if (/^(?:solid|solids)$/.test(lower)) {
+    return { toolName: 'log_meal', input: { meal_type: 'solid' } };
+  }
+  if (/^snack$/.test(lower)) {
+    return { toolName: 'log_meal', input: { meal_type: 'snack' } };
+  }
+  if (/^bottle$/.test(lower)) {
+    return { toolName: 'log_meal', input: { meal_type: 'bottle' } };
+  }
+  return null;
+}
+
+function parseSleepIntent(lower: string): ParsedIntent | null {
+  if (
+    /^(?:nap(?:\s+start(?:ed)?)?|asleep|sleeping|napping|went\s+to\s+sleep|fell\s+asleep|sleep|went\s+down)$/.test(
+      lower,
+    )
+  ) {
+    return { toolName: 'log_sleep_start', input: {} };
+  }
+  if (
+    /^(?:woke?\s+up|awake|nap\s+(?:end(?:ed)?|over|done)|wake\s+up|up)$/.test(lower)
+  ) {
+    return { toolName: 'log_sleep_end', input: {} };
+  }
+  return null;
+}
+
 /**
  * Lightweight pre-parser for simple, unambiguous activity messages.
  * Returns a tool name + input for direct execution — bypassing Claude entirely.
  */
 export function parseIntent(text: string): ParsedIntent | null {
   const trimmed = text.trim();
-
-  if (trimmed.length > 60 || trimmed.includes('?')) return null;
-  const wordCount = trimmed.split(/\s+/).length;
-  if (wordCount > 6) return null;
+  if (!trimmed || trimmed.includes('?')) return null;
+  if (trimmed.length > 80) return null;
 
   const lower = trimmed.toLowerCase();
 
-  const mlMatch = lower.match(
-    /^(?:(?:bottle|fed|feed|gave)\s+)?(\d+)\s*ml(?:\s+bottle)?$/,
-  );
-  if (mlMatch) {
-    return {
-      toolName: 'log_meal',
-      input: { meal_type: 'bottle', amount_ml: parseInt(mlMatch[1], 10) },
-    };
-  }
+  const ml = parseMlAmount(lower);
+  if (ml) return ml;
 
-  if (/^(?:breast(?:fed|feed)?|bf|nursing|nursed)$/.test(lower)) {
-    return { toolName: 'log_meal', input: { meal_type: 'breast' } };
-  }
+  const nappy = parseNappyIntent(lower);
+  if (nappy) return nappy;
 
-  if (/^(?:wet\s+)?nappy(?:\s+change)?$|^wet\s+diaper$/.test(lower)) {
-    return { toolName: 'log_nappy', input: { nappy_type: 'wet' } };
-  }
+  const meal = parseMealIntent(lower);
+  if (meal) return meal;
 
-  if (
-    /^(?:dirty|poo(?:py)?|poop(?:y)?)(?:\s+nappy|\s+diaper)?$|^soiled(?:\s+nappy)?$/.test(lower)
-  ) {
-    return { toolName: 'log_nappy', input: { nappy_type: 'dirty' } };
-  }
+  const sleep = parseSleepIntent(lower);
+  if (sleep) return sleep;
 
-  if (/^(?:wet\s+(?:and|&)\s+dirty|dirty\s+(?:and|&)\s+wet)(?:\s+nappy)?$/.test(lower)) {
-    return { toolName: 'log_nappy', input: { nappy_type: 'both' } };
-  }
-
-  if (
-    /^(?:nap(?:\s+start(?:ed)?)?|asleep|sleeping|napping|went\s+to\s+sleep|fell\s+asleep)$/.test(
-      lower,
-    )
-  ) {
-    return { toolName: 'log_sleep_start', input: {} };
-  }
-
-  if (
-    /^(?:woke?\s+up|awake|nap\s+(?:end(?:ed)?|over|done)|wake\s+up)$/.test(lower)
-  ) {
-    return { toolName: 'log_sleep_end', input: {} };
-  }
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount > 8 || trimmed.length > 60) return null;
 
   return null;
 }
@@ -110,25 +215,38 @@ export function parseQueryIntent(text: string): ParsedSimpleQuery | null {
   if (trimmed.length > 120) return null;
 
   const lower = trimmed.toLowerCase().replace(/[?!.]/g, '').trim();
+  const isYesterday = /\byesterday\b/.test(lower);
+  const isToday = /\btoday\b/.test(lower) || (!isYesterday && !/\bthis\s+week\b/.test(lower));
 
   if (/\b(asleep|sleeping|still\s+sleep(?:ing)?)\b/.test(lower) && /\b(is|are)\b/.test(lower)) {
     return { kind: 'simple_query', queryType: 'is_asleep' };
   }
 
-  if (/\b(how\s+many|number\s+of)\b.*\b(napp(?:y|ies)|diaper)/.test(lower) && /\btoday\b/.test(lower)) {
-    return { kind: 'simple_query', queryType: 'nappy_count_today' };
+  if (/\b(how\s+many|number\s+of)\b.*\b(napp(?:y|ies)|diaper)/.test(lower)) {
+    if (isYesterday) return { kind: 'simple_query', queryType: 'nappy_count_yesterday' };
+    if (isToday) return { kind: 'simple_query', queryType: 'nappy_count_today' };
   }
 
-  if (/\b(how\s+many|number\s+of)\b.*\b(feed|feeds|meal|meals)\b/.test(lower) && /\btoday\b/.test(lower)) {
-    return { kind: 'simple_query', queryType: 'meal_count_today' };
+  if (/\b(how\s+many|number\s+of)\b.*\b(feed|feeds|meal|meals)\b/.test(lower)) {
+    if (isYesterday) return { kind: 'simple_query', queryType: 'meal_count_yesterday' };
+    if (isToday) return { kind: 'simple_query', queryType: 'meal_count_today' };
   }
 
-  if (/\b(how\s+much)\b.*\b(milk|ml|bottle)\b/.test(lower) && /\btoday\b/.test(lower)) {
-    return { kind: 'simple_query', queryType: 'milk_today' };
+  if (/\b(how\s+much)\b.*\b(milk|ml|bottle)\b/.test(lower)) {
+    if (isYesterday) return { kind: 'simple_query', queryType: 'milk_yesterday' };
+    if (isToday) return { kind: 'simple_query', queryType: 'milk_today' };
   }
 
-  if (/\b(how\s+much)\b.*\b(sleep|slept|nap)\b/.test(lower) && /\btoday\b/.test(lower)) {
-    return { kind: 'simple_query', queryType: 'sleep_today' };
+  if (/\b(how\s+much)\b.*\b(sleep|slept|nap)\b/.test(lower)) {
+    if (isYesterday) return { kind: 'simple_query', queryType: 'sleep_yesterday' };
+    if (isToday) return { kind: 'simple_query', queryType: 'sleep_today' };
+  }
+
+  if (/\b(feeds?|meals?|napp(?:y|ies)|diapers?)\b.*\byesterday\b/.test(lower)) {
+    if (/\b(napp|diaper)/.test(lower)) {
+      return { kind: 'simple_query', queryType: 'nappy_count_yesterday' };
+    }
+    return { kind: 'simple_query', queryType: 'meal_count_yesterday' };
   }
 
   if (/\b(when|what\s+time)\b.*\b(last|latest)\b.*\b(eat|fed|feed|meal|bottle|milk)\b/.test(lower)) {

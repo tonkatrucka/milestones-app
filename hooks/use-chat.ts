@@ -15,6 +15,7 @@ import {
   linkChatPhotosToRecentRecords,
   photoUrlsFromBatchMessages,
 } from '@/services/chat-media-link';
+import { executeQuickLog, resolveQuickLogAction } from '@/lib/chat-quick-log';
 import type { ChatMessage, DailyEvent } from '@/lib/database.types';
 
 const DEBOUNCE_MS = 3000;
@@ -253,6 +254,55 @@ export function useChat(
     [childId, childName, childDob, userId, flushBatch],
   );
 
+  const sendQuickLog = useCallback(
+    async (text: string) => {
+      if (!childId || !childName || !childDob || !userId) return;
+
+      const action = resolveQuickLogAction(text);
+      if (!action) {
+        await sendMessage(text, [], { immediate: true });
+        return;
+      }
+
+      const tempId = `tmp-${Date.now()}-${Math.random()}`;
+      const tempUser: ChatMessage = {
+        id: tempId,
+        child_id: childId,
+        user_id: userId,
+        role: 'user',
+        content: text,
+        media_urls: [],
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempUser]);
+      setIsAwaitingReply(true);
+
+      try {
+        const savedUser = await saveChatMessage(childId, 'user', text, []);
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? savedUser : m)));
+
+        const result = await executeQuickLog(action, childId, userId);
+        const savedAssistant = await saveChatMessage(
+          childId,
+          'assistant',
+          result.assistantReply,
+          [],
+        );
+        setMessages((prev) => [...prev, savedAssistant]);
+
+        if (result.ok) {
+          onActivityLogged?.([result.event]);
+        }
+      } catch (e) {
+        console.error('[useChat] sendQuickLog failed:', e);
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      } finally {
+        setIsAwaitingReply(false);
+      }
+    },
+    [childId, childName, childDob, userId, onActivityLogged, sendMessage],
+  );
+
   const loadPreviousDay = useCallback(async () => {
     if (!childId || loadingOlderRef.current || !hasMoreDaysRef.current) return;
 
@@ -300,6 +350,7 @@ export function useChat(
     hasMoreDays,
     isLoadingOlder,
     sendMessage,
+    sendQuickLog,
     loadPreviousDay,
   };
 }

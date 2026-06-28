@@ -94,6 +94,15 @@ const TOOLS: any[] = [
           type: 'number',
           description: 'Amount consumed in ml (for bottle feeds)',
         },
+        duration_mins: {
+          type: 'number',
+          description: 'Duration in minutes (for breast feeds)',
+        },
+        breast_side: {
+          type: 'string',
+          enum: ['left', 'right', 'both'],
+          description: 'Breast side (for breast feeds)',
+        },
         food: {
           type: 'string',
           description: 'Description of food (for solids/snacks)',
@@ -349,12 +358,21 @@ function formatLogConfirmation(toolName: string, input: Record<string, unknown>)
         snack: 'snack',
       };
       const meal = types[String(input.meal_type)] ?? 'meal';
-      const detail =
-        input.amount_ml != null
-          ? ` (${input.amount_ml}ml)`
-          : input.food
-          ? ` (${input.food})`
-          : '';
+      let detail = '';
+      if (input.meal_type === 'breast') {
+        const parts: string[] = [];
+        if (input.breast_side) {
+          const sides: Record<string, string> = { left: 'Left', right: 'Right', both: 'Both' };
+          parts.push(sides[String(input.breast_side)] ?? String(input.breast_side));
+        }
+        if (input.duration_mins != null) parts.push(`${input.duration_mins}m`);
+        else if (input.amount_ml != null) parts.push(`${input.amount_ml}ml`);
+        detail = parts.length ? ` (${parts.join(' · ')})` : '';
+      } else if (input.amount_ml != null) {
+        detail = ` (${input.amount_ml}ml)`;
+      } else if (input.food) {
+        detail = ` (${input.food})`;
+      }
       return `Logged a ${meal}${detail} to today's activities.`;
     }
     case 'log_sleep_start':
@@ -407,6 +425,8 @@ async function handleTool(
     case 'log_meal': {
       const metadata: Record<string, unknown> = { mealType: input.meal_type };
       if (input.amount_ml != null) metadata.amountMl = input.amount_ml;
+      if (input.duration_mins != null) metadata.durationMins = input.duration_mins;
+      if (input.breast_side) metadata.breastSide = input.breast_side;
       if (input.food) metadata.food = input.food;
 
       const { data, error } = await adminDb.from('daily_events').insert({

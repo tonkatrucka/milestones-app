@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from "expo-router/js-tabs";
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { ChildAvatar } from '@/components/children/ChildAvatar';
@@ -26,7 +26,12 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { EditEventModal } from '@/components/events/EditEventModal';
 import { AssistantFab, AssistantQuickSheet } from '@/components/home/AssistantQuickSheet';
 import { logEvent, updateEvent } from '@/services/events';
-import type { DailyEvent, EventType } from '@/lib/database.types';
+import {
+  startSleepTimer,
+  stopSleepTimer,
+  syncSleepTimerWithOpenEvent,
+} from '@/services/sleep-timer';
+import type { DailyEvent, EventType, SleepMetadata } from '@/lib/database.types';
 import { useLogConfirmationStore } from '@/store/log-confirmation-store';
 import { differenceInMonths, differenceInYears } from 'date-fns';
 
@@ -58,6 +63,16 @@ export default function HomeScreen() {
   // Re-fetch every time this screen comes into focus so times update after
   // returning from the log screen or switching back from another tab.
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
+
+  useEffect(() => {
+    const openSleep = lastEvents.sleep;
+    const sleepMeta = openSleep?.metadata as SleepMetadata | undefined;
+    const isOpen = openSleep && !sleepMeta?.sleepEnd;
+    void syncSleepTimerWithOpenEvent(
+      activeChildId,
+      isOpen ? { id: openSleep.id, occurred_at: openSleep.occurred_at, metadata: sleepMeta ?? {} } : null,
+    );
+  }, [activeChildId, lastEvents.sleep]);
 
   const [showChildPicker, setShowChildPicker] = useState(false);
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
@@ -102,6 +117,9 @@ export default function HomeScreen() {
           userId: session.user.id,
           occurredAt,
         });
+        if (type === 'sleep') {
+          await startSleepTimer(activeChildId, event.id, event.occurred_at);
+        }
         confirmLog(event, origin);
       } catch {
         // Silently fail — tooltip already closed
@@ -124,6 +142,7 @@ export default function HomeScreen() {
         metadata: { ...meta, sleepEnd: endAt.toISOString() },
         ...(startAt ? { occurred_at: startAt.toISOString() } : {}),
       });
+      await stopSleepTimer();
       confirmLog(updated, origin);
       refresh();
     } catch { /* ignore */ }
@@ -238,6 +257,7 @@ export default function HomeScreen() {
             <QuickLogCard
               key={type}
               type={type}
+              childId={activeChildId}
               lastEvent={lastEvents[type]}
               readOnly={!canWrite}
               onLog={(metadata, occurredAt, origin) => handleLog(type, metadata, occurredAt, origin)}

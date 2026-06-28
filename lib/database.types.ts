@@ -24,9 +24,13 @@ export interface NappyMetadata {
   nappyType: 'wet' | 'dirty' | 'both' | 'dry';
 }
 
+export type BreastSide = 'left' | 'right' | 'both';
+
 export interface MealMetadata {
   mealType: 'breast' | 'bottle' | 'solid' | 'snack';
   amountMl?: number;
+  durationMins?: number;
+  breastSide?: BreastSide;
   food?: string;
 }
 

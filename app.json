@@ -7,12 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "milestones",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.milestones.app",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true
       }
     },
     "android": {
@@ -23,7 +23,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize"
     },
@@ -50,7 +49,26 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#6B8F71"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-localization",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.milestones.app.widgets",
+          "groupIdentifier": "group.com.milestones.app"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

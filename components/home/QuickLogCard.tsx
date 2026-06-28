@@ -19,6 +19,13 @@ import { TimeSince } from '@/components/shared/TimeSince';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EVENT_LABELS, QUICK_LOG_EMOJIS } from '@/lib/event-display';
 import type { DailyEvent, EventType } from '@/lib/database.types';
+import type { LayoutRect } from '@/store/log-confirmation-store';
+import { BreastFeedControls } from '@/components/meals/BreastFeedControls';
+import { formatBreastfeedingElapsed } from '@/services/breast-feeding-timer';
+import { formatSessionElapsed } from '@/lib/session-elapsed';
+import { useBreastFeedingStore } from '@/store/breast-feeding-store';
+import { usePendingMealQuickLogStore } from '@/store/pending-meal-quick-log-store';
+import { usePendingSleepQuickLogStore } from '@/store/pending-sleep-quick-log-store';
 
 const SLIDER_MAX = 500;
 const THUMB = 22;
@@ -71,167 +78,7 @@ function AmountSlider({
   );
 }
 
-/* ── Meal tooltip (two-step: type → details) ─────────────────────── */
-function MealTooltipContent({
-  accent,
-  borderColor,
-  mutedColor,
-  inputBackground,
-  textColor,
-  onLog,
-}: {
-  accent: string;
-  borderColor: string;
-  mutedColor: string;
-  inputBackground: string;
-  textColor: string;
-  onLog: (meta: Record<string, unknown>) => void;
-}) {
-  const [mealType, setMealType] = useState<string | null>(null);
-  const [amount, setAmount] = useState(120);
-  const [food, setFood] = useState('');
-
-  // Drag-highlight state — same pattern as QuickChipGrid
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const gridRef = useRef<View>(null);
-  const origin = useRef({ x: 0, w: 0 });
-  const dragRef = useRef<number | null>(null);
-  const onLogRef = useRef(onLog);
-  onLogRef.current = onLog;
-
-  const hit = (pageX: number): number | null => {
-    const { x, w } = origin.current;
-    if (w === 0) return null;
-    const N = MEAL_TYPES.length;
-    const GAP = 6;
-    const chipW = (w - (N - 1) * GAP) / N;
-    const offset = pageX - x;
-    if (offset < 0 || offset > w) return null;
-    const i = Math.floor(offset / (chipW + GAP));
-    return i >= 0 && i < N ? i : null;
-  };
-
-  const activateDrag = (i: number | null) => {
-    if (i === dragRef.current) return;
-    dragRef.current = i;
-    setDragIdx(i);
-    if (i !== null) Haptics.selectionAsync().catch(() => {});
-  };
-
-  const needsSlider = mealType === 'breast' || mealType === 'bottle';
-  const needsFoodInput = mealType === 'solid' || mealType === 'snack';
-
-  const handleChip = (v: string) => {
-    setMealType((prev) => (prev === v ? null : v));
-    setFood('');
-  };
-
-  return (
-    <View style={tipStyles.inner}>
-      <Text style={[tipStyles.heading, { color: mutedColor }]}>Meal type</Text>
-
-      {/* Chip grid with drag-highlight — mirrors QuickChipGrid behaviour */}
-      <View
-        ref={gridRef}
-        style={tipStyles.grid}
-        onLayout={() =>
-          gridRef.current?.measureInWindow((x, _y, w) => { origin.current = { x, w }; })
-        }
-        onStartShouldSetResponder={() => false}
-        onMoveShouldSetResponder={() => true}
-        onResponderMove={(e) => activateDrag(hit(e.nativeEvent.pageX))}
-        onResponderRelease={(e) => {
-          const i = hit(e.nativeEvent.pageX);
-          dragRef.current = null;
-          setDragIdx(null);
-          if (i !== null) handleChip(MEAL_TYPES[i].toLowerCase());
-        }}
-        onResponderTerminate={() => { dragRef.current = null; setDragIdx(null); }}>
-        {MEAL_TYPES.map((label, i) => {
-          const v = label.toLowerCase();
-          const isSelected = mealType === v;
-          const isDragging = dragIdx === i;
-          const isActive = isSelected || isDragging;
-          return (
-            <Pressable
-              key={label}
-              style={[
-                tipStyles.chip,
-                { borderColor: accent, backgroundColor: isActive ? accent : 'transparent' },
-              ]}
-              onPressIn={() => {
-                dragRef.current = i;
-                setDragIdx(i);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              onPress={() => handleChip(v)}>
-              <Text style={[tipStyles.chipText, { color: isActive ? '#fff' : accent }]}>
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {needsSlider && (
-        <View style={tipStyles.sliderSection}>
-          <View style={tipStyles.sliderRow}>
-            <Text style={[tipStyles.heading, { color: mutedColor }]}>Amount</Text>
-            <Text style={[tipStyles.amountVal, { color: accent }]}>{amount} ml</Text>
-          </View>
-          <AmountSlider
-            value={amount}
-            accent={accent}
-            trackColor={borderColor}
-            onChange={setAmount}
-          />
-          <View style={tipStyles.logRow}>
-            <Pressable
-              style={[tipStyles.logBtn, tipStyles.logBtnSecondary, { borderColor: accent }]}
-              onPress={() => onLog({ mealType })}>
-              <Text style={[tipStyles.logBtnText, { color: accent }]}>No Amount</Text>
-            </Pressable>
-            <Pressable
-              style={[tipStyles.logBtn, tipStyles.logBtnPrimary, { backgroundColor: accent }]}
-              onPress={() => onLog({ mealType, amountMl: amount })}>
-              <Text style={tipStyles.logBtnText}>Log {amount} ml</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {needsFoodInput && (
-        <View style={tipStyles.sliderSection}>
-          <Text style={[tipStyles.heading, { color: mutedColor }]}>Food</Text>
-          <TextInput
-            style={[
-              tipStyles.foodInput,
-              { backgroundColor: inputBackground, color: textColor, borderColor },
-            ]}
-            placeholder={mealType === 'snack' ? 'e.g. Banana' : 'e.g. Pureed carrot'}
-            placeholderTextColor={mutedColor}
-            value={food}
-            onChangeText={setFood}
-          />
-          <Pressable
-            style={[tipStyles.logBtn, tipStyles.logBtnPrimary, { backgroundColor: accent }]}
-            onPress={() =>
-              onLog({
-                mealType,
-                ...(food.trim() ? { food: food.trim() } : {}),
-              })
-            }>
-            <Text style={tipStyles.logBtnText}>
-              Log {mealType === 'snack' ? 'snack' : 'meal'}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
-
-/* ── Sleep tooltip (pre-filled editable date + time) ─────────────── */
+/* ── Shared date + time field for quick-log tooltips ─────────────── */
 
 function mergeDate(base: Date, dateSrc: Date): Date {
   const merged = new Date(base);
@@ -244,8 +91,6 @@ function mergeTime(base: Date, timeSrc: Date): Date {
   merged.setHours(timeSrc.getHours(), timeSrc.getMinutes(), 0, 0);
   return merged;
 }
-
-type SleepPickerField = 'startDate' | 'startTime' | 'endDate' | 'endTime' | null;
 
 function DateTimeField({
   label,
@@ -294,6 +139,247 @@ function DateTimeField({
     </View>
   );
 }
+
+function EventWhenField({
+  value,
+  onChange,
+  accent,
+  mutedColor,
+  label = 'When',
+}: {
+  value: Date;
+  onChange: (date: Date) => void;
+  accent: string;
+  mutedColor: string;
+  label?: string;
+}) {
+  const scheme = useColorScheme() ?? 'light';
+  const [activePicker, setActivePicker] = useState<'date' | 'time' | null>(null);
+
+  const togglePicker = (field: 'date' | 'time') =>
+    setActivePicker((prev) => (prev === field ? null : field));
+
+  const onPickerChange = (_e: unknown, date?: Date) => {
+    if (Platform.OS === 'android') setActivePicker(null);
+    if (!date || !activePicker) return;
+    onChange(activePicker === 'date' ? mergeDate(value, date) : mergeTime(value, date));
+  };
+
+  return (
+    <>
+      <DateTimeField
+        label={label}
+        value={value}
+        accent={accent}
+        mutedColor={mutedColor}
+        activeDate={activePicker === 'date'}
+        activeTime={activePicker === 'time'}
+        onDatePress={() => togglePicker('date')}
+        onTimePress={() => togglePicker('time')}
+      />
+      {activePicker && (
+        <DateTimePicker
+          value={value}
+          mode={activePicker}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          themeVariant={scheme}
+          onChange={onPickerChange}
+        />
+      )}
+    </>
+  );
+}
+
+/* ── Meal tooltip (two-step: type → details) ─────────────────────── */
+function MealTooltipContent({
+  accent,
+  borderColor,
+  mutedColor,
+  inputBackground,
+  textColor,
+  childId,
+  onLog,
+}: {
+  accent: string;
+  borderColor: string;
+  mutedColor: string;
+  inputBackground: string;
+  textColor: string;
+  childId: string | null;
+  onLog: (meta: Record<string, unknown>, occurredAt?: Date) => void;
+}) {
+  const [mealType, setMealType] = useState<string | null>(null);
+  const [amount, setAmount] = useState(120);
+  const [food, setFood] = useState('');
+  const [occurredAt, setOccurredAt] = useState(() => new Date());
+
+  // Drag-highlight state — same pattern as QuickChipGrid
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const gridRef = useRef<View>(null);
+  const origin = useRef({ x: 0, w: 0 });
+  const dragRef = useRef<number | null>(null);
+  const onLogRef = useRef(onLog);
+  onLogRef.current = onLog;
+
+  const hit = (pageX: number): number | null => {
+    const { x, w } = origin.current;
+    if (w === 0) return null;
+    const N = MEAL_TYPES.length;
+    const GAP = 6;
+    const chipW = (w - (N - 1) * GAP) / N;
+    const offset = pageX - x;
+    if (offset < 0 || offset > w) return null;
+    const i = Math.floor(offset / (chipW + GAP));
+    return i >= 0 && i < N ? i : null;
+  };
+
+  const activateDrag = (i: number | null) => {
+    if (i === dragRef.current) return;
+    dragRef.current = i;
+    setDragIdx(i);
+    if (i !== null) Haptics.selectionAsync().catch(() => {});
+  };
+
+  const needsSlider = mealType === 'bottle';
+  const needsBreastControls = mealType === 'breast';
+  const needsFoodInput = mealType === 'solid' || mealType === 'snack';
+
+  const handleChip = (v: string) => {
+    setMealType((prev) => (prev === v ? null : v));
+    setFood('');
+  };
+
+  return (
+    <View style={tipStyles.inner}>
+      <EventWhenField
+        value={occurredAt}
+        onChange={setOccurredAt}
+        accent={accent}
+        mutedColor={mutedColor}
+      />
+
+      <Text style={[tipStyles.heading, { color: mutedColor }]}>Meal type</Text>
+
+      {/* Chip grid with drag-highlight — mirrors QuickChipGrid behaviour */}
+      <View
+        ref={gridRef}
+        style={tipStyles.grid}
+        onLayout={() =>
+          gridRef.current?.measureInWindow((x, _y, w) => { origin.current = { x, w }; })
+        }
+        onStartShouldSetResponder={() => false}
+        onMoveShouldSetResponder={() => true}
+        onResponderMove={(e) => activateDrag(hit(e.nativeEvent.pageX))}
+        onResponderRelease={(e) => {
+          const i = hit(e.nativeEvent.pageX);
+          dragRef.current = null;
+          setDragIdx(null);
+          if (i !== null) handleChip(MEAL_TYPES[i].toLowerCase());
+        }}
+        onResponderTerminate={() => { dragRef.current = null; setDragIdx(null); }}>
+        {MEAL_TYPES.map((label, i) => {
+          const v = label.toLowerCase();
+          const isSelected = mealType === v;
+          const isDragging = dragIdx === i;
+          const isActive = isSelected || isDragging;
+          return (
+            <Pressable
+              key={label}
+              style={[
+                tipStyles.chip,
+                { borderColor: accent, backgroundColor: isActive ? accent : 'transparent' },
+              ]}
+              onPressIn={() => {
+                dragRef.current = i;
+                setDragIdx(i);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              onPress={() => handleChip(v)}>
+              <Text style={[tipStyles.chipText, { color: isActive ? '#fff' : accent }]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {needsBreastControls && (
+        <BreastFeedControls
+          accent={accent}
+          borderColor={borderColor}
+          mutedColor={mutedColor}
+          inputBackground={inputBackground}
+          textColor={textColor}
+          childId={childId}
+          occurredAt={occurredAt}
+          onLog={onLog}
+        />
+      )}
+
+      {needsSlider && (
+        <View style={tipStyles.sliderSection}>
+          <View style={tipStyles.sliderRow}>
+            <Text style={[tipStyles.heading, { color: mutedColor }]}>Amount</Text>
+            <Text style={[tipStyles.amountVal, { color: accent }]}>{amount} ml</Text>
+          </View>
+          <AmountSlider
+            value={amount}
+            accent={accent}
+            trackColor={borderColor}
+            onChange={setAmount}
+          />
+          <View style={tipStyles.logRow}>
+            <Pressable
+              style={[tipStyles.logBtn, tipStyles.logBtnSecondary, { borderColor: accent }]}
+              onPress={() => onLog({ mealType }, occurredAt)}>
+              <Text style={[tipStyles.logBtnText, { color: accent }]}>No Amount</Text>
+            </Pressable>
+            <Pressable
+              style={[tipStyles.logBtn, tipStyles.logBtnPrimary, { backgroundColor: accent }]}
+              onPress={() => onLog({ mealType, amountMl: amount }, occurredAt)}>
+              <Text style={tipStyles.logBtnText}>Log {amount} ml</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {needsFoodInput && (
+        <View style={tipStyles.sliderSection}>
+          <Text style={[tipStyles.heading, { color: mutedColor }]}>Food</Text>
+          <TextInput
+            style={[
+              tipStyles.foodInput,
+              { backgroundColor: inputBackground, color: textColor, borderColor },
+            ]}
+            placeholder={mealType === 'snack' ? 'e.g. Banana' : 'e.g. Pureed carrot'}
+            placeholderTextColor={mutedColor}
+            value={food}
+            onChangeText={setFood}
+          />
+          <Pressable
+            style={[tipStyles.logBtn, tipStyles.logBtnPrimary, { backgroundColor: accent }]}
+            onPress={() =>
+              onLog(
+                {
+                  mealType,
+                  ...(food.trim() ? { food: food.trim() } : {}),
+                },
+                occurredAt,
+              )
+            }>
+            <Text style={tipStyles.logBtnText}>
+              Log {mealType === 'snack' ? 'snack' : 'meal'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ── Sleep tooltip (pre-filled editable date + time) ─────────────── */
+
+type SleepPickerField = 'startDate' | 'startTime' | 'endDate' | 'endTime' | null;
 
 function SleepTooltipContent({
   isSleeping,
@@ -519,10 +605,38 @@ function QuickChipGrid({
   );
 }
 
-import type { LayoutRect } from '@/store/log-confirmation-store';
+function NappyTooltipContent({
+  accent,
+  mutedColor,
+  onLog,
+}: {
+  accent: string;
+  mutedColor: string;
+  onLog: (meta: Record<string, unknown>, occurredAt?: Date) => void;
+}) {
+  const [occurredAt, setOccurredAt] = useState(() => new Date());
+
+  return (
+    <View style={tipStyles.inner}>
+      <EventWhenField
+        value={occurredAt}
+        onChange={setOccurredAt}
+        accent={accent}
+        mutedColor={mutedColor}
+      />
+      <Text style={[tipStyles.heading, { color: mutedColor }]}>Nappy type</Text>
+      <QuickChipGrid
+        options={NAPPY_TYPES}
+        accent={accent}
+        onSelect={(v) => onLog({ nappyType: v }, occurredAt)}
+      />
+    </View>
+  );
+}
 
 interface QuickLogCardProps {
   type: EventType;
+  childId: string | null;
   lastEvent: DailyEvent | null;
   readOnly?: boolean;
   /** Called with the event's metadata (and optional custom time) when the user confirms. */
@@ -536,6 +650,7 @@ type CardLayout = { x: number; y: number; width: number; height: number };
 
 export function QuickLogCard({
   type,
+  childId,
   lastEvent,
   readOnly = false,
   onLog,
@@ -556,20 +671,32 @@ export function QuickLogCard({
     : null;
   const isSleeping = type === 'sleep' && lastEvent && !sleepMeta?.sleepEnd;
 
+  const breastSession = useBreastFeedingStore((s) => s.session);
+  const isFeeding =
+    type === 'meal' && !!childId && breastSession?.childId === childId;
+
   const [elapsedLabel, setElapsedLabel] = useState('');
+  const [feedingLabel, setFeedingLabel] = useState('');
   useEffect(() => {
     if (!isSleeping || !lastEvent) return;
-    const calc = () => {
-      const mins = differenceInMinutes(new Date(), new Date(lastEvent.occurred_at));
-      if (mins < 1) { setElapsedLabel('just now'); return; }
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      setElapsedLabel(h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`);
-    };
-    calc();
-    const id = setInterval(calc, 60_000);
+    const tick = () => setElapsedLabel(formatSessionElapsed(lastEvent.occurred_at));
+    tick();
+    const id = setInterval(tick, 1_000);
     return () => clearInterval(id);
   }, [isSleeping, lastEvent]);
+
+  useEffect(() => {
+    if (!isFeeding || !breastSession) return;
+    const tick = () => setFeedingLabel(formatBreastfeedingElapsed(breastSession.startedAt));
+    tick();
+    const id = setInterval(tick, 1_000);
+    return () => clearInterval(id);
+  }, [isFeeding, breastSession]);
+
+  const pendingMealQuickLog = usePendingMealQuickLogStore((s) => s.pending);
+  const setPendingMealQuickLog = usePendingMealQuickLogStore((s) => s.setPending);
+  const pendingSleepQuickLog = usePendingSleepQuickLogStore((s) => s.pending);
+  const setPendingSleepQuickLog = usePendingSleepQuickLogStore((s) => s.setPending);
 
   const openTooltip = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -578,6 +705,18 @@ export function QuickLogCard({
       setShowTooltip(true);
     });
   };
+
+  useEffect(() => {
+    if (!pendingMealQuickLog || type !== 'meal' || readOnly) return;
+    setPendingMealQuickLog(false);
+    openTooltip();
+  }, [pendingMealQuickLog, type, readOnly, setPendingMealQuickLog]);
+
+  useEffect(() => {
+    if (!pendingSleepQuickLog || type !== 'sleep' || readOnly) return;
+    setPendingSleepQuickLog(false);
+    openTooltip();
+  }, [pendingSleepQuickLog, type, readOnly, setPendingSleepQuickLog]);
 
   const closeTooltip = () => setShowTooltip(false);
 
@@ -625,14 +764,11 @@ export function QuickLogCard({
   const renderTooltipContent = () => {
     if (type === 'nappy') {
       return (
-        <View style={tipStyles.inner}>
-          <Text style={[tipStyles.heading, { color: colors.muted }]}>Nappy type</Text>
-          <QuickChipGrid
-            options={NAPPY_TYPES}
-            accent={accent}
-            onSelect={(v) => logAndClose({ nappyType: v })}
-          />
-        </View>
+        <NappyTooltipContent
+          accent={accent}
+          mutedColor={colors.muted}
+          onLog={logAndClose}
+        />
       );
     }
 
@@ -644,6 +780,7 @@ export function QuickLogCard({
           mutedColor={colors.muted}
           inputBackground={colors.inputBackground}
           textColor={colors.text}
+          childId={childId}
           onLog={logAndClose}
         />
       );
@@ -684,6 +821,11 @@ export function QuickLogCard({
                 {isSleeping ? 'Sleeping' : 'Awake'}
               </Text>
             </View>
+          ) : type === 'meal' && isFeeding ? (
+            <View style={styles.emojiRow}>
+              <Text style={styles.emoji}>{QUICK_LOG_EMOJIS.meal}</Text>
+              <Text style={[styles.sleepStatus, { color: accent }]}>Feeding</Text>
+            </View>
           ) : (
             <Text style={styles.emoji}>{QUICK_LOG_EMOJIS[type]}</Text>
           )}
@@ -699,6 +841,10 @@ export function QuickLogCard({
                 {isSleeping ? (
                   <Text style={[styles.elapsed, { color: colors.muted }]}>
                     {elapsedLabel || 'just now'}
+                  </Text>
+                ) : isFeeding ? (
+                  <Text style={[styles.elapsed, { color: colors.muted }]}>
+                    {feedingLabel || 'just now'}
                   </Text>
                 ) : (
                   <TimeSince

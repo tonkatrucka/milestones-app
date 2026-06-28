@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DefaultTheme, DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
@@ -13,6 +13,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { getPendingInviteToken } from '@/lib/pending-invite';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { usePendingMealQuickLogStore } from '@/store/pending-meal-quick-log-store';
+import { usePendingSleepQuickLogStore } from '@/store/pending-sleep-quick-log-store';
+import {
+  configureBreastFeedingNotifications,
+  initBreastFeedingTimerListeners,
+} from '@/services/breast-feeding-timer';
+import { initSleepTimerListeners } from '@/services/sleep-timer';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -86,6 +93,28 @@ function useDeepLinkAuth() {
   }, [handleUrl]);
 }
 
+function useActivityDeepLinks() {
+  const setPendingMeal = usePendingMealQuickLogStore((s) => s.setPending);
+  const setPendingSleep = usePendingSleepQuickLogStore((s) => s.setPending);
+
+  const handleUrl = useCallback((url: string) => {
+    const parsed = Linking.parse(url);
+    if (parsed.queryParams?.open === 'meal') {
+      setPendingMeal(true);
+    } else if (parsed.queryParams?.open === 'sleep') {
+      setPendingSleep(true);
+    }
+  }, [setPendingMeal, setPendingSleep]);
+
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => subscription.remove();
+  }, [handleUrl]);
+}
+
 function ConfigErrorScreen() {
   return (
     <View style={configErrorStyles.container}>
@@ -111,6 +140,13 @@ export default function RootLayout() {
   const router = useRouter();
 
   useDeepLinkAuth();
+  useActivityDeepLinks();
+
+  useEffect(() => {
+    configureBreastFeedingNotifications();
+    initBreastFeedingTimerListeners();
+    initSleepTimerListeners();
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;

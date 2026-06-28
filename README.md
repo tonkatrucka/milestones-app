@@ -1,11 +1,13 @@
 # Milestones
 
-Baby tracking app built with Expo (SDK 54) and Supabase. Parents log daily activities, milestones, and memories through a conversational assistant and dedicated tabs.
+Baby tracking app built with Expo (SDK 56) and Supabase. Parents log daily activities, milestones, and memories through a conversational assistant and dedicated tabs.
 
 ## Features
 
 - **Assistant (Chat)** — natural-language logging via Claude (nappy, feeds, sleep, milestones, memories) with photo support
 - **Quick-log tooltips** — tap `+ Log` on the home screen for instant in-place logging without leaving the page
+- **Activity timers** — breastfeeding and sleep sessions show a live chronometer on the home card; iOS Lock Screen / Dynamic Island Live Activities; Android sticky notifications (dev build required on iOS)
+- **Breastfeeding** — log side (left/right/both), duration or amount, manual entry or start/stop timer
 - **Home activity feed** — today's events with accurate sleep duration labels and edit/delete support
 - **Memories** — chronological photo memories with tags
 - **Journey** — unified timeline of milestones and memories with correct sleep duration display
@@ -120,6 +122,18 @@ npm run setup:eas-secrets
 
 Full step-by-step instructions (Play Internal Testing, TestFlight, Apple API keys, troubleshooting): **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
+### iOS Live Activities (breastfeeding & sleep timers)
+
+Lock-screen chronometers require a **development or store build** — they do not work in Expo Go.
+
+```powershell
+npx eas-cli@latest build --platform ios --profile development
+```
+
+Ensure `NSSupportsLiveActivities` is set (configured in `app.json` via `expo-widgets`). After installing on a physical iPhone, start a breast or sleep timer and lock the device to verify the chronometer. Tapping the Live Activity deep-links back to the home quick-log tooltip (`milestones:///?open=meal` or `?open=sleep`).
+
+See **[docs/ACTIVITY_TIMERS.md](docs/ACTIVITY_TIMERS.md)** for architecture, data model, and testing checklist.
+
 ## Troubleshooting
 
 ### `TypeError: fetch failed` when starting Expo
@@ -154,7 +168,7 @@ The assistant is designed to minimise Anthropic API usage:
 | **3s debounce** | Rapid messages within 3 seconds are batched into one API call |
 | **10-message context** | Only the last 10 messages are sent to Claude; UI loads full history by day |
 | **Haiku / Sonnet routing** | Text-only → `claude-haiku-4-5`; messages with photos → `claude-sonnet-4-6` |
-| **Intent parser** | Simple phrases (`"120ml"`, `"wet nappy"`, `"nap"`) bypass Claude entirely |
+| **Intent parser** | Simple phrases (`"120ml"`, `"bf left 10m"`, `"wet nappy"`, `"nap"`) bypass Claude entirely |
 | **Activity tool shortcut** | Meal/nappy/sleep logs skip the second Claude turn; server returns confirmation |
 | **Prompt caching** | System prompt and tool definitions are cached across requests |
 | **Quick-log chips** | One-tap chips above the chat input for common activities |
@@ -188,7 +202,11 @@ npm run audit:research       # source URL allowlist audit
 
 Manual scripts (`npm run bootstrap:research`) are for local debugging or if you prefer not to use GitHub Actions for the one-time fill.
 
-GitHub Actions needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` repository secrets.
+GitHub Actions needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` repository secrets. From a machine with `gh auth login` and a filled-in `.env`:
+
+```bash
+npm run setup:github-secrets
+```
 
 ## Quick-log tooltips
 
@@ -196,13 +214,15 @@ Tapping `+ Log` on any activity card on the home screen opens a compact tooltip 
 
 | Activity | Options |
 | --- | --- |
-| **Nappy** | Wet / Dirty / Both — drag your finger across chips to select |
-| **Meal** | Breast / Bottle / Solid / Snack — Breast & Bottle reveal an amount slider (0–500 ml, 10 ml steps) with a "No Amount" option |
-| **Sleep** | Editable time pill; pre-filled to now. In wake-up mode shows separate Start and End time pills with live duration display |
+| **Nappy** | Wet / Dirty / Both / Dry — drag across chips to select; editable date/time |
+| **Meal** | Breast / Bottle / Solid / Snack — Breast: side, duration vs ml, manual log or start/stop timer; Bottle: ml slider; Solid/Snack: food field |
+| **Sleep** | Editable start (and end when waking). While asleep: live duration on card + Lock Screen timer. Wake-up logs end time |
+
+While a breast or sleep session is active, the home card shows a **Feeding** or **Sleeping** badge with elapsed time. See [docs/ACTIVITY_TIMERS.md](docs/ACTIVITY_TIMERS.md).
 
 ## Editing and deleting events
 
-Long-press or use the edit icon on any event in the home activity feed or journey timeline to open the `EditEventModal`. You can update the time, type-specific fields (nappy type, meal amount, sleep end time) or delete the event entirely.
+Long-press or use the edit icon on any event in the home activity feed or journey timeline to open the `EditEventModal`. You can update the time, type-specific fields (nappy type, meal amount/duration/side, sleep end time) or delete the event entirely.
 
 ## Project structure
 
@@ -212,15 +232,18 @@ components/
   chat/               Chat bubble, input bar, quick-log chips
   children/           Child avatar picker/display
   events/             EditEventModal (edit/delete any logged event)
-  home/               QuickLogCard (tooltip), TodayFeed, SleepBox
+  home/               QuickLogCard (tooltip), TodayFeed, LogConfirmationOverlay
+  meals/              BreastFeedControls (side, duration, timer)
   journey/            Timeline with sleep duration labels
   media/              ResolvedImage (signed URL display)
   memories/           Memory card and grid
   settings/           TransferOwnershipModal
 docs/                 DEPLOYMENT.md (store builds & TestFlight)
 hooks/                React hooks (use-chat, use-insights, use-resolved-media-urls, …)
-lib/                  media-ref, supabase-storage, sanitize-research-text, …
-services/             Supabase data layer (events, media, account, invites, …)
+lib/                  meal-format, session-elapsed, chat-quick-log, media-ref, …
+services/             events, breast-feeding-timer, sleep-timer, media, invites, …
+store/                breast-feeding-store, sleep-timer-store, theme, …
+widgets/              iOS Live Activity layouts (BreastfeedingActivity, SleepingActivity)
 supabase/
   functions/chat/     Claude edge function + intent parser
   functions/insights/ Daily observation cache + research selection

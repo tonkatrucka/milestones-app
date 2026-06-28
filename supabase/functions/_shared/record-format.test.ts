@@ -86,11 +86,20 @@ Deno.test('getEventDetail formats bottle feed', () => {
 });
 
 Deno.test('parseQueryIntent classifies common questions', async () => {
-  const { parseQueryIntent, classifyMessage } = await import('../chat/intent-parser.ts');
+  const { parseQueryIntent, classifyMessage, parseIntent } = await import('../chat/intent-parser.ts');
 
   assertEquals(parseQueryIntent('How many nappies today?')?.queryType, 'nappy_count_today');
+  assertEquals(parseQueryIntent('How many nappies yesterday?')?.queryType, 'nappy_count_yesterday');
+  assertEquals(parseQueryIntent('How many feeds yesterday?')?.queryType, 'meal_count_yesterday');
   assertEquals(parseQueryIntent('When did she last eat?')?.queryType, 'last_meal');
   assertEquals(parseQueryIntent('Is she asleep?')?.queryType, 'is_asleep');
   assertEquals(classifyMessage('Summarise feeding this week'), 'complex_query');
   assertEquals(classifyMessage('120ml'), 'log');
+  assertEquals(parseIntent('150ml')?.toolName, 'log_meal');
+  assertEquals(parseIntent('bottle')?.input.meal_type, 'bottle');
+  assertEquals(parseIntent('solids')?.input.meal_type, 'solid');
+  assertEquals(parseIntent('dry nappy')?.input.nappy_type, 'dry');
+  assertEquals(parseIntent('both')?.input.nappy_type, 'both');
+  assertEquals(parseIntent('nap')?.toolName, 'log_sleep_start');
+  assertEquals(parseIntent('fed 90ml')?.input.amount_ml, 90);
 });

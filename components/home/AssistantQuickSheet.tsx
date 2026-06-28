@@ -70,6 +70,7 @@ export function AssistantQuickSheet({
     hasMoreDays,
     isLoadingOlder,
     sendMessage,
+    sendQuickLog,
     loadPreviousDay,
   } = useChat(
     visible ? childId : null,
@@ -93,9 +94,9 @@ export function AssistantQuickSheet({
 
   const handleQuickLog = useCallback(
     (text: string) => {
-      sendMessage(text, undefined, { immediate: true });
+      void sendQuickLog(text);
     },
-    [sendMessage],
+    [sendQuickLog],
   );
 
   const handleViewAll = useCallback(() => {
@@ -115,6 +116,7 @@ export function AssistantQuickSheet({
         hasMoreDays={hasMoreDays}
         isLoadingOlder={isLoadingOlder}
         sendMessage={sendMessage}
+        sendQuickLog={sendQuickLog}
         loadPreviousDay={loadPreviousDay}
         canWrite={canWrite}
       />

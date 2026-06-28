@@ -24,6 +24,15 @@ function dayBounds(dateStr: string, isToday: boolean): { start: string; end: str
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+function previousDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d - 1);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
 export async function fetchEventsForDate(
   adminDb: SupabaseClient,
   childId: string,
@@ -254,6 +263,10 @@ export async function answerSimpleQuery(
   const todayEvents = await fetchTodayEvents(adminDb, childId, currentDate);
   const today = buildEventDays(todayEvents).find((d) => d.dateKey === currentDate);
 
+  const yesterdayDate = previousDate(currentDate);
+  const yesterdayEvents = await fetchEventsForDate(adminDb, childId, yesterdayDate, currentDate);
+  const yesterday = buildEventDays(yesterdayEvents).find((d) => d.dateKey === yesterdayDate);
+
   switch (query.queryType) {
     case 'nappy_count_today': {
       const count = today?.counts.nappy ?? 0;
@@ -285,6 +298,34 @@ export async function answerSimpleQuery(
         return `No completed sleep logged for ${childName} today yet.`;
       }
       return `${childName} has slept ${formatSleepDuration(mins)} today so far.`;
+    }
+
+    case 'nappy_count_yesterday': {
+      const count = yesterday?.counts.nappy ?? 0;
+      if (count === 0) return `No nappies logged for ${childName} yesterday.`;
+      const breakdown = yesterday
+        ? Object.entries(yesterday.nappyByType).map(([t, n]) => `${n} ${t}`).join(', ')
+        : '';
+      return `${childName} had ${count} napp${count !== 1 ? 'ies' : 'y'} yesterday${breakdown ? ` (${breakdown})` : ''}.`;
+    }
+
+    case 'meal_count_yesterday': {
+      const count = yesterday?.counts.meal ?? 0;
+      if (count === 0) return `No feeds logged for ${childName} yesterday.`;
+      const ml = yesterday?.totalMl ?? 0;
+      return `${childName} had ${count} feed${count !== 1 ? 's' : ''} yesterday${ml > 0 ? ` (${ml}ml bottle total)` : ''}.`;
+    }
+
+    case 'milk_yesterday': {
+      const ml = yesterday?.totalMl ?? 0;
+      if (ml === 0) return `No bottle milk logged for ${childName} yesterday.`;
+      return `${childName} had ${ml}ml from bottles yesterday.`;
+    }
+
+    case 'sleep_yesterday': {
+      const mins = yesterday?.totalSleepMins ?? 0;
+      if (mins === 0) return `No sleep logged for ${childName} yesterday.`;
+      return `${childName} slept ${formatSleepDuration(mins)} yesterday.`;
     }
 
     case 'last_meal': {

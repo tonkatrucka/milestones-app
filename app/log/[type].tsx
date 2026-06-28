@@ -20,8 +20,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { getLastEventByType, logEvent, updateEvent } from '@/services/events';
+import { startSleepTimer, stopSleepTimer } from '@/services/sleep-timer';
 import type { DailyEvent, EventType, NappyMetadata, MealMetadata, SleepMetadata } from '@/lib/database.types';
 import { useLogConfirmationStore } from '@/store/log-confirmation-store';
+import { BreastFeedControls, type BreastFeedValues } from '@/components/meals/BreastFeedControls';
 
 const NAPPY_TYPES: NappyMetadata['nappyType'][] = ['wet', 'dirty', 'both', 'dry'];
 const MEAL_TYPES: MealMetadata['mealType'][] = ['breast', 'bottle', 'solid', 'snack'];
@@ -107,6 +109,12 @@ export default function LogEventScreen() {
   const [mealType, setMealType] = useState<MealMetadata['mealType']>('bottle');
   const [amount, setAmount] = useState('');
   const [food, setFood] = useState('');
+  const [breastValues, setBreastValues] = useState<BreastFeedValues>({
+    side: null,
+    mode: 'duration',
+    durationMins: 10,
+    amountMl: 120,
+  });
 
   // ── Sleep-specific state ──────────────────────────────────────────────────
   type SleepMode = 'loading' | 'new' | 'wakeup';
@@ -167,16 +175,28 @@ export default function LogEventScreen() {
           userId: session.user.id,
         });
       } else if (type === 'meal') {
+        let metadata: MealMetadata;
+        if (mealType === 'breast') {
+          metadata = { mealType: 'breast' };
+          if (breastValues.side) metadata.breastSide = breastValues.side;
+          if (breastValues.mode === 'duration' && breastValues.durationMins > 0) {
+            metadata.durationMins = breastValues.durationMins;
+          } else if (breastValues.mode === 'amount' && breastValues.amountMl > 0) {
+            metadata.amountMl = breastValues.amountMl;
+          }
+        } else {
+          metadata = {
+            mealType,
+            ...(amount ? { amountMl: parseInt(amount, 10) } : {}),
+            ...(food ? { food } : {}),
+          };
+        }
         saved = await logEvent({
           childId: activeChildId,
           type,
           occurredAt: time,
           notes: notes.trim() || undefined,
-          metadata: {
-            mealType,
-            ...(amount ? { amountMl: parseInt(amount, 10) } : {}),
-            ...(food ? { food } : {}),
-          },
+          metadata,
           userId: session.user.id,
         });
       } else if (type === 'sleep') {
@@ -191,6 +211,7 @@ export default function LogEventScreen() {
             metadata: { sleepEnd: sleepEnd.toISOString() } as SleepMetadata,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
           });
+          await stopSleepTimer();
         } else if (sleepMode === 'new') {
           saved = await logEvent({
             childId: activeChildId,
@@ -200,6 +221,7 @@ export default function LogEventScreen() {
             metadata: {},
             userId: session.user.id,
           });
+          await startSleepTimer(activeChildId, saved.id, saved.occurred_at);
         }
       }
 
@@ -361,7 +383,7 @@ export default function LogEventScreen() {
                     ))}
                   </View>
                 </View>
-                {(mealType === 'bottle' || mealType === 'breast') && (
+                {(mealType === 'bottle') && (
                   <View>
                     <Text style={[styles.fieldLabel, { color: colors.muted }]}>Amount (ml)</Text>
                     <TextInput
@@ -374,7 +396,43 @@ export default function LogEventScreen() {
                     />
                   </View>
                 )}
-                {mealType === 'solid' && (
+                {mealType === 'breast' && (
+                  <BreastFeedControls
+                    accent={accent}
+                    borderColor={colors.border}
+                    mutedColor={colors.muted}
+                    inputBackground={colors.inputBackground}
+                    textColor={colors.text}
+                    childId={activeChildId}
+                    occurredAt={time}
+                    showLogActions={false}
+                    values={breastValues}
+                    onValuesChange={setBreastValues}
+                    onLog={async (meta, occurredAt) => {
+                      if (!activeChildId || !session?.user.id) return;
+                      setIsLoading(true);
+                      try {
+                        const savedEvent = await logEvent({
+                          childId: activeChildId,
+                          type: 'meal',
+                          occurredAt: occurredAt ?? time,
+                          notes: notes.trim() || undefined,
+                          metadata: meta as MealMetadata,
+                          userId: session.user.id,
+                        });
+                        if (savedEvent) {
+                          useLogConfirmationStore.getState().confirmLog(savedEvent);
+                        }
+                        router.back();
+                      } catch (e: unknown) {
+                        Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save event.');
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                  />
+                )}
+                {(mealType === 'solid' || mealType === 'snack') && (
                   <View>
                     <Text style={[styles.fieldLabel, { color: colors.muted }]}>Food</Text>
                     <TextInput

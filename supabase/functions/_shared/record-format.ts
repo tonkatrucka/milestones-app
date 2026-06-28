@@ -77,8 +77,15 @@ export function getEventDetail(event: DailyEvent): string {
       const parts: string[] = [];
       const mealType = meta.mealType as string | undefined;
       if (mealType) parts.push(mealType.charAt(0).toUpperCase() + mealType.slice(1));
-      if (typeof meta.amountMl === 'number') parts.push(`${meta.amountMl}ml`);
-      if (meta.food) parts.push(String(meta.food));
+      if (mealType === 'breast') {
+        const side = meta.breastSide as string | undefined;
+        if (side) parts.push(side.charAt(0).toUpperCase() + side.slice(1));
+        if (typeof meta.durationMins === 'number') parts.push(`${meta.durationMins}m`);
+        else if (typeof meta.amountMl === 'number') parts.push(`${meta.amountMl}ml`);
+      } else {
+        if (typeof meta.amountMl === 'number') parts.push(`${meta.amountMl}ml`);
+        if (meta.food) parts.push(String(meta.food));
+      }
       return parts.join(' · ');
     }
     case 'sleep': {

@@ -1,5 +1,6 @@
 import { differenceInMinutes, format } from 'date-fns';
 import type { DailyEvent, EventType, MealMetadata, NappyMetadata, SleepMetadata } from '@/lib/database.types';
+import { formatMealDetailParts } from '@/lib/meal-format';
 
 export const EVENT_LABELS: Record<EventType, string> = {
   nappy: 'Nappy',
@@ -28,11 +29,7 @@ export function getEventDetail(event: DailyEvent): string {
     }
     case 'meal': {
       const m = meta as Partial<MealMetadata>;
-      const parts: string[] = [];
-      if (m.mealType) parts.push(m.mealType.charAt(0).toUpperCase() + m.mealType.slice(1));
-      if (m.amountMl) parts.push(`${m.amountMl}ml`);
-      if (m.food) parts.push(m.food);
-      return parts.join(' · ');
+      return formatMealDetailParts(m).join(' · ');
     }
     case 'sleep': {
       const m = meta as Partial<SleepMetadata>;

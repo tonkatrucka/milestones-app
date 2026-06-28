@@ -80,6 +80,7 @@ export type AssistantChatContentProps = {
     imageUris?: string[],
     options?: { immediate?: boolean },
   ) => Promise<void>;
+  sendQuickLog: (text: string) => Promise<void>;
   loadPreviousDay: () => Promise<void>;
   canWrite: boolean;
 };
@@ -93,6 +94,7 @@ export function AssistantChatContent({
   hasMoreDays,
   isLoadingOlder,
   sendMessage,
+  sendQuickLog,
   loadPreviousDay,
   canWrite,
 }: AssistantChatContentProps) {
@@ -250,9 +252,9 @@ export function AssistantChatContent({
 
   const handleQuickLog = useCallback(
     (text: string) => {
-      sendMessage(text, undefined, { immediate: true });
+      void sendQuickLog(text);
     },
-    [sendMessage],
+    [sendQuickLog],
   );
 
   const handleInputBarLayout = useCallback((height: number) => {
