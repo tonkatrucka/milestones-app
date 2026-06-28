@@ -68,7 +68,7 @@ Live Activities use SwiftUI `Text(timerInterval:)` via `@expo/ui/swift-ui` — t
 ### app.json
 
 - `NSSupportsLiveActivities: true` in iOS `infoPlist`
-- `expo-widgets` plugin with `groupIdentifier: group.com.milestones.app`
+- `expo-widgets` plugin with `groupIdentifier: group.com.tonkatrucka.milestones`
 - `expo-notifications` for Android (and iOS fallback)
 
 ### EAS

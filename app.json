@@ -66,7 +66,7 @@
         "expo-widgets",
         {
           "bundleIdentifier": "com.milestones.app.widgets",
-          "groupIdentifier": "group.com.milestones.app"
+          "groupIdentifier": "group.com.tonkatrucka.milestones"
         }
       ]
     ],
