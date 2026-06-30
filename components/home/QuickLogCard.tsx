@@ -401,6 +401,13 @@ function SleepTooltipContent({
   const [endTime, setEndTime] = useState(() => new Date());
   const [activePicker, setActivePicker] = useState<SleepPickerField>(null);
 
+  const sleepStartKey = sleepStart?.getTime() ?? null;
+
+  useEffect(() => {
+    setStartTime(sleepStartKey != null ? new Date(sleepStartKey) : new Date());
+    if (!isSleeping) setEndTime(new Date());
+  }, [isSleeping, sleepStartKey]);
+
   const togglePicker = (field: SleepPickerField) =>
     setActivePicker((prev) => (prev === field ? null : field));
 
@@ -790,7 +797,7 @@ export function QuickLogCard({
     return (
       <SleepTooltipContent
         isSleeping={!!isSleeping}
-        sleepStart={lastEvent ? new Date(lastEvent.occurred_at) : undefined}
+        sleepStart={isSleeping && lastEvent ? new Date(lastEvent.occurred_at) : undefined}
         accent={accent}
         mutedColor={colors.muted}
         onStart={(at) => logAndClose({}, at)}

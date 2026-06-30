@@ -124,7 +124,7 @@ export function AssistantQuickSheet({
 
   const fullModeContent = (
     <SafeAreaView
-      edges={['top', 'left', 'right']}
+      edges={['top', 'left', 'right', 'bottom']}
       style={[styles.sheet, styles.sheetFull, { backgroundColor: colors.elevated }]}>
       <View style={styles.header}>
         <View style={styles.headerText}>
@@ -159,7 +159,7 @@ export function AssistantQuickSheet({
 
   const quickModeContent = (
     <SafeAreaView
-      edges={[]}
+      edges={['bottom']}
       style={[
         styles.sheet,
         styles.sheetQuick,
