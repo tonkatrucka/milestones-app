@@ -12,11 +12,13 @@
       }
     },
     "preview": {
+      "channel": "preview",
       "distribution": "store",
       "environment": "preview",
       "autoIncrement": true
     },
     "production": {
+      "channel": "production",
       "distribution": "store",
       "environment": "production",
       "autoIncrement": true
