@@ -11,6 +11,7 @@ import {
   parseQueryIntent,
   type MessageClass,
 } from './intent-parser.ts';
+import { notifyTeamMembers } from '../_shared/notify-team.ts';
 
 // ─── CORS headers ─────────────────────────────────────────────────────────────
 
@@ -395,6 +396,29 @@ interface ToolHandleResult {
   event?: Record<string, unknown>;
 }
 
+async function notifyFromChatTool(
+  // deno-lint-ignore no-explicit-any
+  adminDb: any,
+  childId: string,
+  userId: string | null,
+  recordType: 'activity' | 'memory' | 'milestone',
+  summary: string,
+  recordId?: string,
+) {
+  if (!userId) return;
+  try {
+    await notifyTeamMembers(adminDb, {
+      childId,
+      recordType,
+      createdByUserId: userId,
+      summary,
+      recordId,
+    });
+  } catch (e) {
+    console.error('[chat] notify failed:', e);
+  }
+}
+
 async function handleTool(
   toolName: string,
   // deno-lint-ignore no-explicit-any
@@ -419,6 +443,14 @@ async function handleTool(
         created_by: userId,
       }).select().single();
       if (error) throw new Error(`log_nappy: ${error.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'activity',
+        `Nappy · ${String(input.nappy_type ?? 'change')}`,
+        data.id,
+      );
       return { message: formatLogConfirmation('log_nappy', input), event: data };
     }
 
@@ -438,6 +470,14 @@ async function handleTool(
         created_by: userId,
       }).select().single();
       if (error) throw new Error(`log_meal: ${error.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'activity',
+        `Meal · ${String(input.meal_type ?? 'logged')}`,
+        data.id,
+      );
       return { message: formatLogConfirmation('log_meal', input), event: data };
     }
 
@@ -451,6 +491,14 @@ async function handleTool(
         created_by: userId,
       }).select().single();
       if (error) throw new Error(`log_sleep_start: ${error.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'activity',
+        'Sleep · started',
+        data.id,
+      );
       return { message: formatLogConfirmation('log_sleep_start', input), event: data };
     }
 
@@ -480,11 +528,19 @@ async function handleTool(
         .single();
 
       if (updateErr) throw new Error(`log_sleep_end update: ${updateErr.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'activity',
+        'Sleep · woke up',
+        data.id,
+      );
       return { message: formatLogConfirmation('log_sleep_end', input), event: data };
     }
 
     case 'log_milestone': {
-      const { error } = await adminDb.from('milestones').insert({
+      const { data, error } = await adminDb.from('milestones').insert({
         child_id: childId,
         category: input.category,
         title: input.title,
@@ -492,13 +548,21 @@ async function handleTool(
         achieved_at: input.achieved_at ?? currentDate,
         media_urls: batchMediaUrls.slice(0, 5),
         created_by: userId,
-      });
+      }).select('id').single();
       if (error) throw new Error(`log_milestone: ${error.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'milestone',
+        String(input.title ?? 'Milestone'),
+        data?.id,
+      );
       return { message: formatLogConfirmation('log_milestone', input) };
     }
 
     case 'log_memory': {
-      const { error } = await adminDb.from('memories').insert({
+      const { data, error } = await adminDb.from('memories').insert({
         child_id: childId,
         title: input.title,
         description: input.description ?? null,
@@ -506,8 +570,16 @@ async function handleTool(
         media_urls: [...new Set([...(input.media_urls ?? []), ...batchMediaUrls])].slice(0, 5),
         tags: input.tags ?? [],
         created_by: userId,
-      });
+      }).select('id').single();
       if (error) throw new Error(`log_memory: ${error.message}`);
+      await notifyFromChatTool(
+        adminDb,
+        childId,
+        userId,
+        'memory',
+        String(input.title ?? 'Memory'),
+        data?.id,
+      );
       return { message: formatLogConfirmation('log_memory', input) };
     }
 

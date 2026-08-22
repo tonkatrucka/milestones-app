@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024"
+     height="1024"
+     viewBox="0 0 512 512">
+
+  <!-- Bottom rock -->
+  <path
+    d="M115 335
+       C115 285 165 245 245 245
+       C340 245 400 285 400 335
+       C400 385 340 425 245 425
+       C165 425 115 385 115 335Z"
+    fill="#7A7A7A"
+    stroke="#3C3C3C"
+    stroke-width="10"
+    stroke-linejoin="round"/>
+
+  <!-- Bottom highlight -->
+  <path
+    d="M170 285
+       C215 265 285 265 330 285"
+    fill="none"
+    stroke="#AFAFAF"
+    stroke-width="8"
+    stroke-linecap="round"
+    opacity="0.7"/>
+
+  <!-- Top rock -->
+  <path
+    d="M205 215
+       C205 175 235 145 285 145
+       C335 145 370 175 370 215
+       C370 255 335 285 285 285
+       C235 285 205 255 205 215Z"
+    fill="#9B9B9B"
+    stroke="#3C3C3C"
+    stroke-width="10"
+    stroke-linejoin="round"/>
+
+  <!-- Top highlight -->
+  <path
+    d="M245 180
+       C265 170 300 170 320 180"
+    fill="none"
+    stroke="#D9D9D9"
+    stroke-width="7"
+    stroke-linecap="round"
+    opacity="0.8"/>
+
+</svg>

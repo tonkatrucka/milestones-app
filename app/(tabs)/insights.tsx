@@ -1,4 +1,4 @@
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from "expo-router/js-tabs";
 import { Colors, Fonts, Spacing } from '@/constants/theme';
@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
 import { useInsights } from '@/hooks/use-insights';
 import { ObservationSection } from '@/components/insights/ObservationSection';
+import { InsightsScreenSkeleton } from '@/components/insights/InsightsScreenSkeleton';
 import { ResearchBullets } from '@/components/insights/ResearchBullets';
 
 export default function InsightsScreen() {
@@ -14,8 +15,12 @@ export default function InsightsScreen() {
   const colors = Colors[scheme];
   const tabBarHeight = useBottomTabBarHeight();
   const { session } = useAuth();
-  const { activeChild } = useActiveChild(session?.user.id ?? null);
+  const { activeChild, isBootstrapping } = useActiveChild(session?.user.id ?? null);
   const { data, isLoading, error, refresh } = useInsights(activeChild);
+
+  if (isBootstrapping || (isLoading && !data)) {
+    return <InsightsScreenSkeleton />;
+  }
 
   if (!activeChild) {
     return (
@@ -24,14 +29,6 @@ export default function InsightsScreen() {
           <Text style={styles.emptyEmoji}>💡</Text>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No child selected</Text>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading && !data) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, styles.centred, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
       </SafeAreaView>
     );
   }

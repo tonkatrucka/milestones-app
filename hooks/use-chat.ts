@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  getChatMessagesByIds,
   getChatMessagesForDay,
   getOldestMsgBeforeDay,
   getRecentChatContext,
@@ -32,6 +34,7 @@ export function useChat(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAwaitingReply, setIsAwaitingReply] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [hasMoreDays, setHasMoreDays] = useState(true);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
@@ -118,12 +121,17 @@ export function useChat(
     setIsAwaitingReply(true);
 
     try {
-      // Fetch a fresh 10-message context from DB — not the full UI-loaded history
-      const context = await getRecentChatContext(childId, CONTEXT_LIMIT);
-
-      const batchMessages = context.filter((m) => batchIds.has(m.id));
-      const contextMessages = context.filter((m) => !batchIds.has(m.id));
+      const batchMessages = await getChatMessagesByIds(childId, [...batchIds]);
       if (batchMessages.length === 0) return;
+
+      // Fetch extra rows so filtering out the current batch still leaves context
+      const context = await getRecentChatContext(
+        childId,
+        CONTEXT_LIMIT + batchMessages.length,
+      );
+      const contextMessages = context
+        .filter((m) => !batchIds.has(m.id))
+        .slice(-CONTEXT_LIMIT);
 
       const batchResolvedMedia = await Promise.all(
         batchMessages.map((m) =>
@@ -187,6 +195,17 @@ export function useChat(
       setMessages((prev) => [...prev, savedAssistant]);
     } catch (e) {
       console.error('[useChat] flushBatch failed:', e);
+      try {
+        const savedAssistant = await saveChatMessage(
+          childId,
+          'assistant',
+          "I couldn't process that, please try again.",
+          [],
+        );
+        setMessages((prev) => [...prev, savedAssistant]);
+      } catch (saveError) {
+        console.error('[useChat] failed to save error reply:', saveError);
+      }
     } finally {
       flushInProgressRef.current = false;
       setIsAwaitingReply(false);
@@ -216,6 +235,7 @@ export function useChat(
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempMsg]);
+      setIsSending(true);
 
       try {
         let mediaUrls: string[] = [];
@@ -249,6 +269,12 @@ export function useChat(
       } catch (e) {
         console.error('[useChat] sendMessage failed:', e);
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        Alert.alert(
+          "Couldn't send",
+          e instanceof Error ? e.message : 'Please try again in a moment.',
+        );
+      } finally {
+        setIsSending(false);
       }
     },
     [childId, childName, childDob, userId, flushBatch],
@@ -296,6 +322,10 @@ export function useChat(
       } catch (e) {
         console.error('[useChat] sendQuickLog failed:', e);
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        Alert.alert(
+          "Couldn't send",
+          e instanceof Error ? e.message : 'Please try again in a moment.',
+        );
       } finally {
         setIsAwaitingReply(false);
       }
@@ -346,7 +376,7 @@ export function useChat(
   return {
     messages,
     isLoading,
-    isAwaitingReply,
+    isAwaitingReply: isAwaitingReply || isSending,
     hasMoreDays,
     isLoadingOlder,
     sendMessage,

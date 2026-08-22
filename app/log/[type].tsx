@@ -73,9 +73,9 @@ function TimePicker({
           value={value}
           mode="time"
           display="default"
-          onChange={(_, d) => {
+          onChange={(event, d) => {
             setShowAndroid(false);
-            if (d) onChange(d);
+            if (event.type === 'set' && d) onChange(d);
           }}
         />
       )}
@@ -296,7 +296,10 @@ export default function LogEventScreen() {
                     value={time}
                     mode="time"
                     display="default"
-                    onChange={(_, d) => { setShowAndroidPicker(false); if (d) setTime(d); }}
+                    onChange={(event, d) => {
+                      setShowAndroidPicker(false);
+                      if (event.type === 'set' && d) setTime(d);
+                    }}
                   />
                 )}
               </View>

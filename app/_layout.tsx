@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { DefaultTheme, DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +21,7 @@ import {
   initBreastFeedingTimerListeners,
 } from '@/services/breast-feeding-timer';
 import { initSleepTimerListeners } from '@/services/sleep-timer';
+import { registerPushToken } from '@/services/push-notifications';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -149,6 +151,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!session?.user.id) return;
+    registerPushToken(session.user.id).catch(() => {});
+  }, [session?.user.id]);
+
+  useEffect(() => {
     if (isLoading) return;
 
     // Auth screens live at /login, /register, /forgot-password, /reset-password
@@ -187,11 +194,15 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
+    <KeyboardProvider
+      statusBarTranslucent={Platform.OS === 'android'}
+      navigationBarTranslucent={Platform.OS === 'android'}>
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <ThemeProvider value={navigationTheme}>
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="assistant" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
         <Stack.Screen name="onboarding/add-child" options={{ presentation: 'modal', title: 'Add a child' }} />
         <Stack.Screen name="log/[type]" options={{ presentation: 'modal', title: 'Log event' }} />
         <Stack.Screen name="milestone/new" options={{ presentation: 'modal', title: 'New milestone' }} />
@@ -205,6 +216,7 @@ export default function RootLayout() {
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
     </SafeAreaProvider>
+    </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

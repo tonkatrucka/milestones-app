@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,11 +11,12 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { pickImage } from '@/lib/pick-image';
+import { pickImageFromCamera, pickImageFromLibrary } from '@/lib/pick-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MAX_CHAT_PHOTOS } from '@/services/chat';
+import { chatSendPayload } from '@/lib/chat-send-payload';
 
 const QUICK_LOG_CHIPS = [
   { id: 'wet', label: 'Wet nappy', text: 'Wet nappy', icon: 'water-outline' },
@@ -27,49 +29,97 @@ interface ChatInputProps {
   onSend: (text: string, imageUris?: string[]) => void;
   onQuickLog: (text: string) => void;
   disabled?: boolean;
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
+  onBeforeNativePicker?: () => void | Promise<void>;
+  onAfterNativePicker?: () => void;
 }
 
-export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onQuickLog,
+  disabled = false,
+  onInputFocus,
+  onInputBlur,
+  onBeforeNativePicker,
+  onAfterNativePicker,
+}: ChatInputProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const [text, setText] = useState('');
   const [imageUris, setImageUris] = useState<string[]>([]);
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
-  const pickImages = useCallback(async () => {
-    if (imageUris.length >= MAX_CHAT_PHOTOS) {
+  const remainingSlots = MAX_CHAT_PHOTOS - imageUris.length;
+
+  const addPickedUris = useCallback((uris: string[] | null) => {
+    if (!uris?.length) return;
+    setImageUris((prev) => [...prev, ...uris].slice(0, MAX_CHAT_PHOTOS));
+  }, []);
+
+  const pickImages = useCallback(() => {
+    if (remainingSlots <= 0) {
       Alert.alert('Limit reached', `You can attach up to ${MAX_CHAT_PHOTOS} photos per message.`);
       return;
     }
-    const uris = await pickImage({
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_CHAT_PHOTOS - imageUris.length,
-      quality: 0.8,
-    });
-    if (uris) {
-      setImageUris((prev) => [...prev, ...uris].slice(0, MAX_CHAT_PHOTOS));
+    Keyboard.dismiss();
+    setSourcePickerOpen((open) => !open);
+  }, [remainingSlots]);
+
+  const chooseFromLibrary = useCallback(async () => {
+    setSourcePickerOpen(false);
+    Keyboard.dismiss();
+    await onBeforeNativePicker?.();
+    try {
+      const uris = await pickImageFromLibrary({
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        quality: 0.8,
+      });
+      addPickedUris(uris);
+    } finally {
+      onAfterNativePicker?.();
     }
-  }, [imageUris.length]);
+  }, [addPickedUris, remainingSlots, onBeforeNativePicker, onAfterNativePicker]);
+
+  const takePhoto = useCallback(async () => {
+    setSourcePickerOpen(false);
+    Keyboard.dismiss();
+    await onBeforeNativePicker?.();
+    try {
+      const uris = await pickImageFromCamera({ quality: 0.8 });
+      addPickedUris(uris);
+    } finally {
+      onAfterNativePicker?.();
+    }
+  }, [addPickedUris, onBeforeNativePicker, onAfterNativePicker]);
 
   const removeImage = useCallback((index: number) => {
     setImageUris((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const handleSend = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed && imageUris.length === 0) return;
-    const fallbackText =
-      imageUris.length > 1 ? `📷 (${imageUris.length} photos)` : '📷';
-    onSend(trimmed || fallbackText, imageUris.length > 0 ? imageUris : undefined);
+    const payload = chatSendPayload(text, imageUris);
+    if (!payload) return;
+    onSend(payload.text, payload.imageUris);
     setText('');
     setImageUris([]);
+    setSourcePickerOpen(false);
   }, [text, imageUris, onSend]);
 
   const canSend = (text.trim().length > 0 || imageUris.length > 0) && !disabled;
   const atPhotoLimit = imageUris.length >= MAX_CHAT_PHOTOS;
 
+  const handleFocus = useCallback(() => {
+    onInputFocus?.();
+  }, [onInputFocus]);
+
+  const handleBlur = useCallback(() => {
+    onInputBlur?.();
+  }, [onInputBlur]);
+
   return (
     <View style={styles.container}>
-      {/* Quick-log chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -93,6 +143,25 @@ export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputPro
           </Pressable>
         ))}
       </ScrollView>
+
+      {sourcePickerOpen && (
+        <View style={styles.sourceRow}>
+          <Pressable
+            style={[styles.sourceBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+            onPress={() => void takePhoto()}
+            disabled={disabled}>
+            <Ionicons name="camera-outline" size={16} color={colors.primary} />
+            <Text style={[styles.sourceLabel, { color: colors.text }]}>Take photo</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sourceBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+            onPress={() => void chooseFromLibrary()}
+            disabled={disabled}>
+            <Ionicons name="images-outline" size={16} color={colors.primary} />
+            <Text style={[styles.sourceLabel, { color: colors.text }]}>Choose from library</Text>
+          </Pressable>
+        </View>
+      )}
 
       {imageUris.length > 0 && (
         <ScrollView
@@ -119,9 +188,10 @@ export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputPro
           style={[styles.attachBtn, { backgroundColor: colors.inputBackground }]}
           onPress={pickImages}
           disabled={disabled || atPhotoLimit}
-          hitSlop={8}>
+          hitSlop={8}
+          accessibilityLabel={sourcePickerOpen ? 'Close photo options' : 'Attach photo'}>
           <Ionicons
-            name="attach"
+            name={sourcePickerOpen ? 'close' : 'attach'}
             size={22}
             color={disabled || atPhotoLimit ? colors.muted : colors.primary}
           />
@@ -142,6 +212,8 @@ export function ChatInput({ onSend, onQuickLog, disabled = false }: ChatInputPro
           onChangeText={setText}
           maxLength={1000}
           editable={!disabled}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           returnKeyType="send"
           blurOnSubmit={false}
           submitBehavior="submit"
@@ -192,6 +264,25 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  sourceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sourceLabel: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   imagePreviewScroll: {
     marginBottom: Spacing.sm,

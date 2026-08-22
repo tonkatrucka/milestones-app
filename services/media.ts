@@ -1,17 +1,32 @@
 import { File } from 'expo-file-system';
+import { EncodingType, readAsStringAsync } from 'expo-file-system/legacy';
 import { encodeStorageRef, storageBucketForObject, storageObjectPath } from '@/lib/media-ref';
+import { opaqueMediaPath } from '@/lib/media-path';
+import { base64ToArrayBuffer } from '@/lib/base64';
 import { supabase } from '@/lib/supabase';
 
 const CHAT_BUCKET = 'chat-media';
 const MILESTONE_BUCKET = 'milestone-media';
 
-function opaquePath(prefix: string, ext = 'jpg'): string {
-  return `${prefix}/${crypto.randomUUID()}.${ext}`;
-}
-
 /** Read a local file URI into an ArrayBuffer — required for Supabase Storage on React Native. */
-async function readUriAsArrayBuffer(localUri: string): Promise<ArrayBuffer> {
-  return new File(localUri).arrayBuffer();
+export async function readUriAsArrayBuffer(localUri: string): Promise<ArrayBuffer> {
+  try {
+    return await new File(localUri).arrayBuffer();
+  } catch {
+    // Image-picker URIs (content://, ph://) often fail the new File API.
+  }
+
+  try {
+    const response = await fetch(localUri);
+    if (response.ok) {
+      return await response.arrayBuffer();
+    }
+  } catch {
+    // Fall through to the legacy Base64 reader.
+  }
+
+  const base64 = await readAsStringAsync(localUri, { encoding: EncodingType.Base64 });
+  return base64ToArrayBuffer(base64);
 }
 
 async function uploadToBucket(
@@ -45,7 +60,7 @@ export async function uploadMilestoneMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const path = opaquePath('m');
+  const path = opaqueMediaPath(childId, 'm');
   return uploadToBucket(MILESTONE_BUCKET, path, localUri, mimeType, childId);
 }
 
@@ -63,7 +78,7 @@ export async function uploadMemoryMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const path = opaquePath('mem');
+  const path = opaqueMediaPath(childId, 'mem');
   return uploadToBucket(MILESTONE_BUCKET, path, localUri, mimeType, childId);
 }
 
@@ -72,7 +87,7 @@ export async function uploadChatMedia(
   localUri: string,
   mimeType = 'image/jpeg',
 ): Promise<string> {
-  const path = opaquePath('c');
+  const path = opaqueMediaPath(childId, 'c');
   return uploadToBucket(CHAT_BUCKET, path, localUri, mimeType, childId);
 }
 
@@ -87,6 +102,6 @@ export async function uploadChildAvatar(
   childId: string,
   localUri: string,
 ): Promise<string> {
-  const path = opaquePath('a');
+  const path = opaqueMediaPath(childId, 'a');
   return uploadToBucket(MILESTONE_BUCKET, path, localUri, 'image/jpeg', childId, true);
 }

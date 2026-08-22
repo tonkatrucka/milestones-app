@@ -45,6 +45,7 @@ import {
 } from '@/services/invites';
 import type { Child, Invite, MemberRole } from '@/lib/database.types';
 import { TransferOwnershipModal } from '@/components/settings/TransferOwnershipModal';
+import { NotificationSettingsSection } from '@/components/settings/NotificationSettingsSection';
 
 function teamErrorMessage(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'message' in e) {
@@ -747,6 +748,8 @@ export default function SettingsScreen() {
             })}
           </View>
         </Section>
+
+        <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
 
         <Section title="Account" colors={colors}>
           <View style={styles.infoRow}>

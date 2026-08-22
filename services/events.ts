@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase';
+import { formatEventSummary } from '@/lib/event-display';
+import { notifyTeamOfNewRecord } from '@/services/notify-team';
 import type { DailyEvent, EventType, EventMetadata } from '@/lib/database.types';
 
 export async function getTodayEvents(childId: string, daysBack = 0): Promise<DailyEvent[]> {
@@ -68,6 +70,15 @@ export async function logEvent(params: {
     .single();
 
   if (error) throw error;
+
+  void notifyTeamOfNewRecord({
+    childId: params.childId,
+    recordType: 'activity',
+    createdByUserId: params.userId,
+    summary: formatEventSummary(data),
+    recordId: data.id,
+  });
+
   return data;
 }
 

@@ -9,23 +9,36 @@ import { useMemberRole } from '@/hooks/use-member-role';
 import { useActivitiesTimeline } from '@/hooks/use-activities-timeline';
 import { useAppStore } from '@/store/app-store';
 import { ActivitiesTimeline } from '@/components/journey/ActivitiesTimeline';
+import { ActivitiesWeekView } from '@/components/journey/ActivitiesWeekView';
 import { EditEventModal } from '@/components/events/EditEventModal';
+import { SegmentedToggle } from '@/components/shared/SegmentedToggle';
 import type { DailyEvent } from '@/lib/database.types';
+
+type ActivitiesViewMode = 'log' | 'week';
 
 export default function ActivitiesScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const { session } = useAuth();
-  const { activeChild } = useActiveChild(session?.user.id ?? null);
+  const { activeChild, isBootstrapping } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
 
-  const { sections, isLoading, refresh } = useActivitiesTimeline(
+  const { sections, weekDays, isLoading, refresh } = useActivitiesTimeline(
     activeChildId,
     activeChild?.date_of_birth ?? null,
   );
 
+  const [viewMode, setViewMode] = useState<ActivitiesViewMode>('log');
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
+
+  if (isBootstrapping) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, styles.centred, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
 
   if (!activeChild) {
     return (
@@ -55,14 +68,34 @@ export default function ActivitiesScreen() {
           adjustsFontSizeToFit>
           {activeChild.name}'s Activities
         </Text>
+        <SegmentedToggle
+          options={[
+            { key: 'log', label: 'Daily log' },
+            { key: 'week', label: 'Past week' },
+          ]}
+          selected={viewMode}
+          onSelect={setViewMode}
+          colors={colors}
+        />
       </View>
 
-      <ActivitiesTimeline
-        sections={sections}
-        isLoading={isLoading}
-        onRefresh={refresh}
-        onEventLongPress={canWrite ? setEditingEvent : undefined}
-      />
+      {viewMode === 'log' ? (
+        <ActivitiesTimeline
+          sections={sections}
+          isLoading={isLoading}
+          onRefresh={refresh}
+          onEventLongPress={canWrite ? setEditingEvent : undefined}
+        />
+      ) : (
+        <View style={styles.flex}>
+          <ActivitiesWeekView
+            weekDays={weekDays}
+            isLoading={isLoading}
+            onRefresh={refresh}
+            onEventLongPress={canWrite ? setEditingEvent : undefined}
+          />
+        </View>
+      )}
 
       <EditEventModal
         event={editingEvent}
@@ -82,6 +115,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
   },
   title: {
     fontSize: 26,

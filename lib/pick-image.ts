@@ -48,7 +48,7 @@ async function requestCameraPermission(): Promise<boolean> {
   return true;
 }
 
-async function pickFromLibrary(options: PickImageOptions): Promise<string[] | null> {
+export async function pickImageFromLibrary(options: PickImageOptions = {}): Promise<string[] | null> {
   if (!(await requestLibraryPermission())) return null;
 
   const result = await ImagePicker.launchImageLibraryAsync(buildPickerOptions(options));
@@ -56,7 +56,7 @@ async function pickFromLibrary(options: PickImageOptions): Promise<string[] | nu
   return result.assets.map((asset) => asset.uri);
 }
 
-async function pickFromCamera(options: PickImageOptions): Promise<string[] | null> {
+export async function pickImageFromCamera(options: PickImageOptions = {}): Promise<string[] | null> {
   if (!(await requestCameraPermission())) return null;
 
   const { allowsMultipleSelection: _multi, selectionLimit: _limit, ...cameraOptions } = options;
@@ -65,14 +65,31 @@ async function pickFromCamera(options: PickImageOptions): Promise<string[] | nul
   return [result.assets[0].uri];
 }
 
+type PickerAction = 'camera' | 'library' | 'cancel';
+
 /** Prompt to take a photo or choose from the library; returns local URIs or null if cancelled. */
 export function pickImage(options: PickImageOptions = {}): Promise<string[] | null> {
   if (Platform.OS === 'web') {
-    return pickFromLibrary(options);
+    return pickImageFromLibrary(options);
   }
 
   return new Promise((resolve) => {
-    const finish = (uris: string[] | null) => resolve(uris);
+    let action: PickerAction | null = null;
+    let started = false;
+
+    const run = (chosen: PickerAction) => {
+      if (started) return;
+      started = true;
+      if (chosen === 'camera') {
+        void pickImageFromCamera(options).then(resolve);
+        return;
+      }
+      if (chosen === 'library') {
+        void pickImageFromLibrary(options).then(resolve);
+        return;
+      }
+      resolve(null);
+    };
 
     Alert.alert(
       'Add photo',
@@ -81,18 +98,48 @@ export function pickImage(options: PickImageOptions = {}): Promise<string[] | nu
         {
           text: 'Take Photo',
           onPress: () => {
-            void pickFromCamera(options).then(finish);
+            action = 'camera';
+            if (Platform.OS === 'android') {
+              setTimeout(() => run('camera'), 350);
+            } else {
+              run('camera');
+            }
           },
         },
         {
           text: 'Choose from Library',
           onPress: () => {
-            void pickFromLibrary(options).then(finish);
+            action = 'library';
+            if (Platform.OS === 'android') {
+              setTimeout(() => run('library'), 350);
+            } else {
+              run('library');
+            }
           },
         },
-        { text: 'Cancel', style: 'cancel', onPress: () => finish(null) },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            action = 'cancel';
+            if (Platform.OS === 'android') {
+              setTimeout(() => run('cancel'), 350);
+            } else {
+              run('cancel');
+            }
+          },
+        },
       ],
-      { cancelable: true, onDismiss: () => finish(null) },
+      {
+        cancelable: true,
+        // Android fires onDismiss for button presses too. Only treat it as
+        // cancel when no button recorded a choice.
+        onDismiss: () => {
+          setTimeout(() => {
+            if (!started && action == null) run('cancel');
+          }, Platform.OS === 'android' ? 450 : 0);
+        },
+      },
     );
   });
 }

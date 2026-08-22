@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { AppLogo } from '@/components/shared/AppLogo';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
@@ -138,7 +139,7 @@ export default function LoginScreen() {
         automaticallyAdjustKeyboardInsets>
 
         <View style={styles.hero}>
-          <Text style={styles.heroEmoji}>👶</Text>
+          <AppLogo size={96} />
           <Text style={[styles.appName, { color: colors.primary, fontFamily: Fonts!.rounded }]}>
             Milestones
           </Text>
@@ -273,9 +274,6 @@ const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
     gap: Spacing.sm,
-  },
-  heroEmoji: {
-    fontSize: 64,
   },
   appName: {
     fontSize: 36,

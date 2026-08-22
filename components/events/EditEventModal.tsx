@@ -125,9 +125,9 @@ function TimePicker({
           value={value}
           mode="time"
           display="default"
-          onChange={(_, d) => {
+          onChange={(event, d) => {
             setShowAndroid(false);
-            if (d) onChange(d);
+            if (event.type === 'set' && d) onChange(d);
           }}
         />
       )}
@@ -306,7 +306,7 @@ export function EditEventModal({
       <View style={modalStyles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={modalStyles.sheetWrapper}>
           <View style={[modalStyles.sheet, { backgroundColor: colors.card }, mode === 'edit' && modalStyles.sheetEdit]}>
             <View style={[modalStyles.handle, { backgroundColor: colors.border }]} />

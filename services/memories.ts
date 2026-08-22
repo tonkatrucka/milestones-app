@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { notifyTeamOfNewRecord } from '@/services/notify-team';
 import type { Memory } from '@/lib/database.types';
 
 export async function getMemory(id: string): Promise<Memory | null> {
@@ -47,6 +48,17 @@ export async function createMemory(params: {
     .single();
 
   if (error) throw error;
+
+  if (params.userId) {
+    void notifyTeamOfNewRecord({
+      childId: params.childId,
+      recordType: 'memory',
+      createdByUserId: params.userId,
+      summary: params.title,
+      recordId: data.id,
+    });
+  }
+
   return data;
 }
 

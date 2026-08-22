@@ -32,7 +32,7 @@ export function ResearchBullets({ bullets }: Props) {
     return (
       <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
         <Text style={[styles.sectionTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-          Research
+          Recent Articles
         </Text>
         <Text style={[styles.muted, { color: colors.muted }]}>
           Tips from trusted sources like the NHS and CDC will show up here for your child's age.
@@ -44,7 +44,7 @@ export function ResearchBullets({ bullets }: Props) {
   return (
     <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-        Research
+        Recent Articles
       </Text>
 
       {Object.entries(grouped).map(([category, items]) => (

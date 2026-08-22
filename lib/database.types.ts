@@ -148,6 +148,23 @@ export interface Invite {
   created_at: string;
 }
 
+export interface NotificationPreferences {
+  user_id: string;
+  notify_activities: boolean;
+  notify_memories: boolean;
+  notify_milestones: boolean;
+  updated_at: string;
+}
+
+export interface PushToken {
+  id: string;
+  user_id: string;
+  expo_push_token: string;
+  platform: string | null;
+  device_id: string | null;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -185,6 +202,16 @@ export interface Database {
         Row: Invite;
         Insert: Omit<Invite, 'id' | 'token' | 'created_at'>;
         Update: Partial<Omit<Invite, 'id' | 'created_at'>>;
+      };
+      notification_preferences: {
+        Row: NotificationPreferences;
+        Insert: Omit<NotificationPreferences, 'updated_at'> & { updated_at?: string };
+        Update: Partial<Omit<NotificationPreferences, 'user_id'>>;
+      };
+      push_tokens: {
+        Row: PushToken;
+        Insert: Omit<PushToken, 'id' | 'updated_at'> & { id?: string; updated_at?: string };
+        Update: Partial<Omit<PushToken, 'id'>>;
       };
       research_bullets: {
         Row: ResearchBulletRow;

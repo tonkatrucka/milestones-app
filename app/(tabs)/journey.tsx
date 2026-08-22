@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
@@ -10,6 +10,7 @@ import { useMemberRole } from '@/hooks/use-member-role';
 import { useJourneyTimeline } from '@/hooks/use-journey-timeline';
 import { useAppStore } from '@/store/app-store';
 import { JourneyTimeline } from '@/components/journey/JourneyTimeline';
+import { JourneyScreenSkeleton } from '@/components/journey/JourneyScreenSkeleton';
 import { deleteMemory } from '@/services/memories';
 import { deleteMilestone } from '@/services/milestones';
 import type { Memory, Milestone } from '@/lib/database.types';
@@ -19,7 +20,7 @@ export default function JourneyScreen() {
   const colors = Colors[scheme];
   const router = useRouter();
   const { session } = useAuth();
-  const { activeChild } = useActiveChild(session?.user.id ?? null);
+  const { activeChild, isBootstrapping } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
 
@@ -64,6 +65,10 @@ export default function JourneyScreen() {
     [refresh],
   );
 
+  if (isBootstrapping || (isLoading && sections.length === 0)) {
+    return <JourneyScreenSkeleton />;
+  }
+
   if (!activeChild) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -71,14 +76,6 @@ export default function JourneyScreen() {
           <Text style={styles.emptyEmoji}>🗺️</Text>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No child selected</Text>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading && sections.length === 0) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, styles.centred, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
       </SafeAreaView>
     );
   }

@@ -12,20 +12,34 @@ interface ResolvedImageProps {
 
 export function ResolvedImage({ stored, style, contentFit = 'cover', ttlSec }: ResolvedImageProps) {
   const [uri, setUri] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    setUri(null);
+    setFailed(false);
+
     resolveMediaUrl(stored, ttlSec ? { ttlSec } : undefined)
       .then((resolved) => {
-        if (mounted) setUri(resolved);
+        if (!mounted) return;
+        if (resolved) {
+          setUri(resolved);
+        } else {
+          setFailed(true);
+        }
       })
       .catch(() => {
-        if (mounted) setUri(null);
+        if (mounted) setFailed(true);
       });
+
     return () => {
       mounted = false;
     };
   }, [stored, ttlSec]);
+
+  if (failed) {
+    return <View style={[styles.placeholder, style]} />;
+  }
 
   if (!uri) {
     return (
@@ -42,5 +56,6 @@ const styles = StyleSheet.create({
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
 });

@@ -159,8 +159,11 @@ function EventWhenField({
   const togglePicker = (field: 'date' | 'time') =>
     setActivePicker((prev) => (prev === field ? null : field));
 
-  const onPickerChange = (_e: unknown, date?: Date) => {
-    if (Platform.OS === 'android') setActivePicker(null);
+  const onPickerChange = (event: { type?: string }, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setActivePicker(null);
+      if (event.type !== 'set') return;
+    }
     if (!date || !activePicker) return;
     onChange(activePicker === 'date' ? mergeDate(value, date) : mergeTime(value, date));
   };
@@ -415,8 +418,11 @@ function SleepTooltipContent({
     activePicker === 'startDate' || activePicker === 'startTime' ? startTime : endTime;
   const pickerMode = activePicker?.endsWith('Date') ? 'date' : 'time';
 
-  const onPickerChange = (_e: unknown, date?: Date) => {
-    if (Platform.OS === 'android') setActivePicker(null);
+  const onPickerChange = (event: { type?: string }, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setActivePicker(null);
+      if (event.type !== 'set') return;
+    }
     if (!date || !activePicker) return;
 
     if (activePicker === 'startDate') setStartTime((prev) => mergeDate(prev, date));

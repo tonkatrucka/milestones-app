@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -53,7 +54,7 @@ export default function HomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
-  const { activeChild, children, isChildrenLoading } = useActiveChild(session?.user.id ?? null);
+  const { activeChild, children, isBootstrapping } = useActiveChild(session?.user.id ?? null);
   const setActiveChildId = useAppStore((s) => s.setActiveChildId);
   const activeChildId = useAppStore((s) => s.activeChildId);
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
@@ -78,6 +79,14 @@ export default function HomeScreen() {
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
   const [showAssistant, setShowAssistant] = useState(false);
   const [highlightEventId, setHighlightEventId] = useState<string | null>(null);
+
+  const openAssistant = useCallback(() => {
+    if (Platform.OS === 'android') {
+      router.push('/assistant' as never);
+      return;
+    }
+    setShowAssistant(true);
+  }, [router]);
 
   const feedRef = useRef<View>(null);
   const pending = useLogConfirmationStore((s) => s.pending);
@@ -159,7 +168,7 @@ export default function HomeScreen() {
     [addEvent, confirmLog, refresh],
   );
 
-  if (isChildrenLoading) {
+  if (isBootstrapping) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={colors.primary} />
@@ -288,18 +297,20 @@ export default function HomeScreen() {
     </SafeAreaView>
 
       {!showAssistant && (
-        <AssistantFab onPress={() => setShowAssistant(true)} />
+        <AssistantFab onPress={openAssistant} />
       )}
 
-      <AssistantQuickSheet
-        visible={showAssistant}
-        onClose={() => setShowAssistant(false)}
-        childId={activeChildId}
-        childName={activeChild.name}
-        childDob={activeChild.date_of_birth}
-        canWrite={canWrite}
-        onActivityLogged={handleActivityLogged}
-      />
+      {Platform.OS !== 'android' && (
+        <AssistantQuickSheet
+          visible={showAssistant}
+          onClose={() => setShowAssistant(false)}
+          childId={activeChildId}
+          childName={activeChild.name}
+          childDob={activeChild.date_of_birth}
+          canWrite={canWrite}
+          onActivityLogged={handleActivityLogged}
+        />
+      )}
 
       <LogConfirmationOverlay />
     </View>

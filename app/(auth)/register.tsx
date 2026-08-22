@@ -15,6 +15,7 @@ import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { AppLogo } from '@/components/shared/AppLogo';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -134,13 +135,15 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
         automaticallyAdjustKeyboardInsets>
 
-        <Text style={styles.heroEmoji}>✨</Text>
-        <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-          Create your account
-        </Text>
-        <Text style={[styles.subheading, { color: colors.muted }]}>
-          Start tracking your little one's journey.
-        </Text>
+        <View style={styles.hero}>
+          <AppLogo size={88} />
+          <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            Create your account
+          </Text>
+          <Text style={[styles.subheading, { color: colors.muted }]}>
+            Start tracking your little one's journey.
+          </Text>
+        </View>
 
         <View style={styles.fields}>
           {/* Email */}
@@ -304,9 +307,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.lg,
   },
-  heroEmoji: {
-    fontSize: 48,
-    textAlign: 'center',
+  hero: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   heading: {
     fontSize: 26,

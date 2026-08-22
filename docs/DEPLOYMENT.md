@@ -38,14 +38,20 @@ Both platforms share bundle identifiers with `app.json`:
 
 ## Database migrations before testing
 
-Apply all migrations through `017_transfer_child_ownership.sql` before testers use a new build:
+Apply all migrations through `018_push_notifications.sql` before testers use a new build:
 
 ```bash
 npx supabase db push
-npx supabase functions deploy chat insights research-refresh
+npx supabase functions deploy chat insights research-refresh notify-record
 ```
 
-Recent migrations add storage hardening, account deletion, and ownership transfer — see [README](../README.md#database-migrations).
+Recent migrations add storage hardening, account deletion, ownership transfer, and team push tokens — see [README](../README.md#database-migrations).
+
+Before another Play or TestFlight iterate on chat photos, run the Node check (no store build):
+
+```bash
+npm run verify:chat-photo
+```
 
 ---
 
@@ -171,6 +177,9 @@ npx eas-cli@latest submit --platform ios --profile preview --latest
 | Apple SMS 2FA error | Use App Store Connect API key env vars (above) |
 | Build credentials fail | `npx eas-cli@latest credentials --platform ios` with API key vars set |
 | Insights empty in production | Run research bootstrap workflow or migration `011` seed for dev |
+| Chat photo: `Property 'crypto' doesn't exist` | Do not use `crypto.randomUUID()`; run `npm run verify:chat-photo` |
+| Android library picker dismisses immediately | Chat must use in-app source buttons, not `Alert.alert` |
+| Team push never arrives | Apply migration `018`, deploy `notify-record`, allow notifications in Settings |
 
 ---
 

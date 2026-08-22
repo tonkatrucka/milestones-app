@@ -11,6 +11,7 @@ import Animated, {
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EVENT_EMOJIS, EVENT_LABELS, formatEventTime, getEventDetail } from '@/lib/event-display';
+import { SegmentedToggle } from '@/components/shared/SegmentedToggle';
 import type { DailyEvent, EventType } from '@/lib/database.types';
 
 type ActivityDay = 'today' | 'yesterday';
@@ -58,7 +59,11 @@ export function TodayFeed({
   return (
     <View style={styles.container}>
       {showDayToggle ? (
-        <DayToggle
+        <SegmentedToggle
+          options={[
+            { key: 'today', label: 'Today' },
+            { key: 'yesterday', label: 'Yesterday' },
+          ]}
           selected={activeDay}
           onSelect={forceToday ? () => {} : setSelectedDay}
           colors={colors}
@@ -103,44 +108,6 @@ export function TodayFeed({
           </View>
         )
       )}
-    </View>
-  );
-}
-
-function DayToggle({
-  selected,
-  onSelect,
-  colors,
-}: {
-  selected: ActivityDay;
-  onSelect: (day: ActivityDay) => void;
-  colors: typeof Colors.light;
-}) {
-  const options: { key: ActivityDay; label: string }[] = [
-    { key: 'today', label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-  ];
-
-  return (
-    <View style={[styles.toggleTrack, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {options.map((opt) => {
-        const active = selected === opt.key;
-        return (
-          <Pressable
-            key={opt.key}
-            style={[styles.toggleOption, active && { backgroundColor: colors.elevated }]}
-            onPress={() => onSelect(opt.key)}>
-            <Text
-              style={[
-                styles.toggleLabel,
-                { color: active ? colors.text : colors.muted },
-                active && styles.toggleLabelActive,
-              ]}>
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }
@@ -226,27 +193,6 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 16,
-    fontWeight: '700',
-  },
-  toggleTrack: {
-    flexDirection: 'row',
-    borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 2,
-  },
-  toggleOption: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: Radius.sm,
-  },
-  toggleLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: Fonts!.rounded,
-  },
-  toggleLabelActive: {
     fontWeight: '700',
   },
   card: {

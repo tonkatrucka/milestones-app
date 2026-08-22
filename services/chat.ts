@@ -67,6 +67,24 @@ export async function getRecentChatContext(
   return (data ?? []).reverse();
 }
 
+/** Fetch specific chat messages by id, in chronological order. */
+export async function getChatMessagesByIds(
+  childId: string,
+  ids: string[],
+): Promise<ChatMessage[]> {
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .select('*')
+    .eq('child_id', childId)
+    .in('id', ids)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function saveChatMessage(
   childId: string,
   role: 'user' | 'assistant',

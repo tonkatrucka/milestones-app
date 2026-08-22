@@ -4,7 +4,7 @@ Baby tracking app built with Expo (SDK 56) and Supabase. Parents log daily activ
 
 ## Features
 
-- **Assistant (Chat)** — natural-language logging via Claude (nappy, feeds, sleep, milestones, memories) with photo support
+- **Assistant (Chat)** — natural-language logging via Claude (nappy, feeds, sleep, milestones, memories) with photos. Android uses a full-screen `/assistant` route; iOS keeps the home sheet. Attach from the in-app paperclip (Take photo / Choose from library), not a system `Alert`.
 - **Quick-log tooltips** — tap `+ Log` on the home screen for instant in-place logging without leaving the page
 - **Activity timers** — breastfeeding and sleep sessions show a live chronometer on the home card; iOS Lock Screen / Dynamic Island Live Activities; Android sticky notifications (dev build required on iOS)
 - **Breastfeeding** — log side (left/right/both), duration or amount, manual entry or start/stop timer
@@ -24,12 +24,12 @@ Baby tracking app built with Expo (SDK 56) and Supabase. Parents log daily activ
 
 2. Configure environment — create `.env` with your Supabase project URL and anon key (see `.env.example` if present).
 
-3. Run database migrations — apply migrations in `supabase/migrations/` in order (through `017_transfer_child_ownership.sql`) in the Supabase SQL editor (or via `supabase db push`). See [Database migrations](#database-migrations) below.
+3. Run database migrations — apply migrations in `supabase/migrations/` in order (through `018_push_notifications.sql`) in the Supabase SQL editor (or via `supabase db push`). See [Database migrations](#database-migrations) below.
 
 4. Deploy edge functions
 
    ```bash
-   npx supabase functions deploy chat insights research-refresh
+   npx supabase functions deploy chat insights research-refresh notify-record
    npx supabase secrets set ANTHROPIC_API_KEY=your_key_here
    # Optional cron auth for research-refresh:
    npx supabase secrets set CRON_SECRET=your_cron_secret
@@ -70,6 +70,7 @@ The **Settings** tab supports:
 - **Transfer ownership** — hand a child profile to another team member (owner only)
 - **Delete child profile** — removes the child and associated data (owner only)
 - **Delete account** — self-service removal of owned profiles, storage files, memberships, and auth user
+- **Notifications** — opt in to Expo push alerts when a teammate logs an activity, memory, or milestone
 - **Theme** — system / light / dark preference
 
 Team invites use shareable deep links (`milestones://` / web fallback).
@@ -83,7 +84,15 @@ Photos are stored in Supabase Storage with hardened access controls (migrations 
 | `chat-media` | Private — signed URLs | Chat images; team members only |
 | `milestone-media` | Public bucket, opaque paths | Memories, milestones, avatars |
 
+Object paths are `{childId}/{prefix}/{uuid}.jpg` (for example `{childId}/c/{uuid}.jpg` for chat). The first segment must be the child UUID so storage RLS can authorize the write. File IDs come from `lib/random-id.ts`, which never calls bare `crypto.randomUUID()` — Hermes throws `Property 'crypto' doesn't exist` on that lookup.
+
 The app stores `storage://bucket/path` references in the database and resolves signed URLs at display time (`lib/media-ref.ts`, `ResolvedImage`, `useResolvedMediaUrls`). Legacy public URLs still work for existing uploads.
+
+Chat photos: paperclip → in-app **Choose from library** → send. Upload reads the local URI as an `ArrayBuffer` (`File`, `fetch`, then Base64 fallback) and batches via `uploadChatMediaBatch`. Verify the path without a store build:
+
+```bash
+npm run verify:chat-photo
+```
 
 Auth sessions use **expo-secure-store** (chunked on Android) via `lib/supabase-storage.ts`.
 
@@ -97,6 +106,7 @@ Auth sessions use **expo-secure-store** (chunked on Android) via `lib/supabase-s
 | `015_storage_opaque_paths_and_private_chat` | Private chat bucket; opaque milestone paths |
 | `016_delete_my_account` | `delete_my_account()` RPC for self-service account removal |
 | `017_transfer_child_ownership` | `transfer_child_ownership()` RPC for profile handoff |
+| `018_push_notifications` | `notification_preferences` and `push_tokens` for team Expo push |
 
 After pulling schema changes:
 
@@ -160,6 +170,13 @@ The npm scripts already use `--offline` by default (`npm run start`). Use `npm r
 - Kill a stale Metro process holding port 8081: `Stop-Process -Name node -Force` (then restart)
 - Test reachability: `curl https://api.expo.dev`
 
+### Chat photo send fails with `Property 'crypto' doesn't exist`
+
+Hermes has no Web Crypto `crypto` global. Storage object names must use `randomFileId()` (`lib/random-id.ts`), never `crypto.randomUUID()`. Run `npm run verify:chat-photo` after changing upload or picker code.
+
+### Android: Choose from library closes and nothing happens
+
+Do not launch the image picker from `Alert.alert` on Android — `onDismiss` fires on button press and the picker activity is dropped. Chat uses in-app **Take photo / Choose from library** buttons in `ChatInput`. Other screens delay the picker ~350ms after the alert button.
 
 The assistant is designed to minimise Anthropic API usage:
 
@@ -189,6 +206,7 @@ npx supabase db push
 npx supabase functions deploy insights research-refresh
 npm run verify:insights      # fingerprint + JSON shape checks
 npm run audit:research       # source URL allowlist audit
+npm run verify:chat-photo    # Hermes-safe IDs + chat photo payload (no device)
 ```
 
 ### Research bank maintenance
@@ -227,28 +245,31 @@ Long-press or use the edit icon on any event in the home activity feed or journe
 ## Project structure
 
 ```
-app/                  Expo Router screens (tabs, memory, milestone)
+app/                  Expo Router screens (tabs, /assistant, memory, milestone)
 components/
-  chat/               Chat bubble, input bar, quick-log chips
+  chat/               Chat bubble, input bar, in-app photo source picker
   children/           Child avatar picker/display
   events/             EditEventModal (edit/delete any logged event)
-  home/               QuickLogCard (tooltip), TodayFeed, LogConfirmationOverlay
+  home/               QuickLogCard, AssistantQuickSheet (iOS), TodayFeed
   meals/              BreastFeedControls (side, duration, timer)
-  journey/            Timeline with sleep duration labels
+  journey/            Timeline, week view, sleep duration labels
   media/              ResolvedImage (signed URL display)
   memories/           Memory card and grid
-  settings/           TransferOwnershipModal
+  settings/           TransferOwnershipModal, NotificationSettingsSection
+  shared/             AppLogo, Skeleton, SegmentedToggle
 docs/                 DEPLOYMENT.md (store builds & TestFlight)
-hooks/                React hooks (use-chat, use-insights, use-resolved-media-urls, …)
-lib/                  meal-format, session-elapsed, chat-quick-log, media-ref, …
-services/             events, breast-feeding-timer, sleep-timer, media, invites, …
+hooks/                use-chat, use-insights, use-notification-preferences, …
+lib/                  random-id, media-path, chat-send-payload, media-ref, …
+services/             events, media, chat, push-notifications, notify-team, …
+scripts/              verify-chat-photo-upload.ts, generate-brand-assets.mjs, …
 store/                breast-feeding-store, sleep-timer-store, theme, …
 widgets/              iOS Live Activity layouts (BreastfeedingActivity, SleepingActivity)
 supabase/
   functions/chat/     Claude edge function + intent parser
   functions/insights/ Daily observation cache + research selection
+  functions/notify-record/ Team Expo push when a record is created
   functions/research-refresh/ Research bank bootstrap, append, hygiene
-  migrations/         Database schema (001–017)
+  migrations/         Database schema (001–018)
 ```
 
 ## Learn more

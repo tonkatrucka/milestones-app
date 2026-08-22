@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/use-auth';
 import { useAppStore } from '@/store/app-store';
 
 /**
@@ -18,15 +19,14 @@ export function resetChildrenCache() {}
  * queried before the session was restored from AsyncStorage.
  */
 export function useActiveChild(userId: string | null) {
+  const { isLoading: isAuthLoading } = useAuth();
   const { children, activeChildId, isChildrenLoading, setChildren, setIsChildrenLoading } =
     useAppStore();
   const activeChild = useAppStore((s) => s.activeChild());
+  const isBootstrapping = isAuthLoading || (!!userId && isChildrenLoading);
 
   const fetchChildren = useCallback(() => {
-    if (!userId) {
-      setIsChildrenLoading(false);
-      return;
-    }
+    if (!userId) return;
 
     setIsChildrenLoading(true);
     supabase
@@ -44,12 +44,16 @@ export function useActiveChild(userId: string | null) {
   }, [userId, setChildren, setIsChildrenLoading]);
 
   useEffect(() => {
-    if (!userId) {
-      setIsChildrenLoading(false);
-      return;
-    }
+    if (!userId) return;
     fetchChildren();
   }, [userId, fetchChildren]);
 
-  return { children, activeChildId, activeChild, isChildrenLoading, refreshChildren: fetchChildren };
+  return {
+    children,
+    activeChildId,
+    activeChild,
+    isChildrenLoading,
+    isBootstrapping,
+    refreshChildren: fetchChildren,
+  };
 }

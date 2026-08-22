@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { notifyTeamOfNewRecord } from '@/services/notify-team';
 import type { Milestone, MilestoneCategory } from '@/lib/database.types';
 
 export async function getMilestones(childId: string): Promise<Milestone[]> {
@@ -47,6 +48,15 @@ export async function createMilestone(params: {
     .single();
 
   if (error) throw error;
+
+  void notifyTeamOfNewRecord({
+    childId: params.childId,
+    recordType: 'milestone',
+    createdByUserId: params.userId,
+    summary: params.title,
+    recordId: data.id,
+  });
+
   return data;
 }
 

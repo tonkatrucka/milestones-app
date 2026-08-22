@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  KeyboardAvoidingView,
+  InteractionManager,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -11,7 +12,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardState } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
@@ -22,6 +24,7 @@ import { AssistantChatContent } from '@/components/chat/AssistantChatContent';
 import { MessageBubble, TypingIndicator } from '@/components/chat/MessageBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import type { DailyEvent } from '@/lib/database.types';
+import type { ChatMessage } from '@/lib/database.types';
 import type { LayoutRect } from '@/store/log-confirmation-store';
 
 type AssistantMode = 'quick' | 'full';
@@ -47,7 +50,14 @@ export function AssistantQuickSheet({
 }: AssistantQuickSheetProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 0);
+  const keyboardHeight = useKeyboardState((state) =>
+    state.isVisible ? state.height : 0,
+  );
+  const composerBottomPad = Spacing.sm + Math.max(keyboardHeight, bottomInset);
   const [mode, setMode] = useState<AssistantMode>('quick');
+  const [hideForPicker, setHideForPicker] = useState(false);
 
   const handleActivityLogged = useCallback(
     (events: DailyEvent[]) => {
@@ -84,11 +94,13 @@ export function AssistantQuickSheet({
   useEffect(() => {
     if (!visible) {
       setMode('quick');
+      setHideForPicker(false);
     }
   }, [visible]);
 
   const handleClose = useCallback(() => {
     setMode('quick');
+    setHideForPicker(false);
     onClose();
   }, [onClose]);
 
@@ -101,6 +113,20 @@ export function AssistantQuickSheet({
 
   const handleViewAll = useCallback(() => {
     setMode('full');
+  }, []);
+
+  const handleBeforeNativePicker = useCallback(async () => {
+    Keyboard.dismiss();
+    setHideForPicker(true);
+    await new Promise<void>((resolve) => {
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(resolve, 350);
+      });
+    });
+  }, []);
+
+  const handleAfterNativePicker = useCallback(() => {
+    setHideForPicker(false);
   }, []);
 
   const isFull = mode === 'full';
@@ -119,149 +145,229 @@ export function AssistantQuickSheet({
         sendQuickLog={sendQuickLog}
         loadPreviousDay={loadPreviousDay}
         canWrite={canWrite}
+        onBeforeNativePicker={handleBeforeNativePicker}
+        onAfterNativePicker={handleAfterNativePicker}
       />
     ) : null;
 
-  const fullModeContent = (
-    <SafeAreaView
-      edges={['top', 'left', 'right', 'bottom']}
-      style={[styles.sheet, styles.sheetFull, { backgroundColor: colors.elevated }]}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text
-            style={[
-              styles.title,
-              styles.titleFull,
-              { color: colors.text, fontFamily: Fonts!.rounded },
-            ]}>
-            Assistant
-          </Text>
-          {childName ? (
-            <Text style={[styles.subtitle, { color: colors.muted }]}>
-              Tell me about {childName}'s day
-            </Text>
-          ) : null}
-        </View>
-        <Pressable onPress={handleClose} hitSlop={8} accessibilityLabel="Close">
-          <Ionicons name="close" size={22} color={colors.muted} />
-        </Pressable>
-      </View>
-
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
-          {fullChatBody}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.flex}>{fullChatBody}</View>
-      )}
-    </SafeAreaView>
-  );
-
-  const quickModeContent = (
-    <SafeAreaView
-      edges={['bottom']}
+  const quickInputBar = canWrite ? (
+    <View
       style={[
-        styles.sheet,
-        styles.sheetQuick,
-        { backgroundColor: colors.elevated, borderColor: colors.border },
+        styles.inputDock,
+        {
+          backgroundColor: colors.elevated,
+          borderTopColor: colors.border,
+          paddingBottom: composerBottomPad,
+        },
       ]}>
-      <View style={[styles.handle, { backgroundColor: colors.border }]} />
-
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            Assistant
-          </Text>
-          {childName ? (
-            <Text style={[styles.subtitle, { color: colors.muted }]}>
-              Quick log for {childName}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable onPress={handleViewAll} hitSlop={8} style={styles.viewAllBtn}>
-          <Text style={[styles.viewAllText, { color: colors.primary }]}>View all</Text>
-        </Pressable>
-        <Pressable onPress={handleClose} hitSlop={8} accessibilityLabel="Close">
-          <Ionicons name="close" size={22} color={colors.muted} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        style={styles.messages}
-        contentContainerStyle={[
-          styles.messagesContent,
-          !user && !assistant && !isLoading && styles.messagesEmpty,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        {isLoading ? (
-          <ActivityIndicator color={colors.primary} style={styles.loader} />
-        ) : (
-          <>
-            {!user && !assistant && (
-              <View style={styles.emptyHint}>
-                <Text style={styles.emptyEmoji}>✨</Text>
-                <Text
-                  style={[
-                    styles.emptyTitle,
-                    { color: colors.text, fontFamily: Fonts!.rounded },
-                  ]}>
-                  What happened today?
-                </Text>
-                <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                  Tell me about feeds, naps, nappies, or a special moment — I'll log it for you.
-                </Text>
-              </View>
-            )}
-            {user ? <MessageBubble message={user} /> : null}
-            {isAwaitingReply ? (
-              <TypingIndicator />
-            ) : assistant ? (
-              <MessageBubble message={assistant} />
-            ) : null}
-          </>
-        )}
-      </ScrollView>
-
-      <View style={[styles.inputWrapper, { borderTopColor: colors.border }]}>
-        {canWrite ? (
-          <ChatInput
-            onSend={sendMessage}
-            onQuickLog={handleQuickLog}
-            disabled={isAwaitingReply}
-          />
-        ) : (
-          <View style={styles.viewerNotice}>
-            <Text style={[styles.viewerNoticeText, { color: colors.muted }]}>
-              View-only access — you can read messages but cannot chat or log events.
-            </Text>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+      <ChatInput
+        onSend={sendMessage}
+        onQuickLog={handleQuickLog}
+        disabled={isAwaitingReply}
+        onBeforeNativePicker={handleBeforeNativePicker}
+        onAfterNativePicker={handleAfterNativePicker}
+      />
+    </View>
+  ) : (
+    <View style={[styles.viewerNotice, { paddingBottom: composerBottomPad }]}>
+      <Text style={[styles.viewerNoticeText, { color: colors.muted }]}>
+        View-only access — you can read messages but cannot chat or log events.
+      </Text>
+    </View>
   );
+
+  const sheetContent = (
+    <View style={styles.modalRoot}>
+      {isFull ? (
+        <FullAssistantSheetBody
+          colors={colors}
+          childName={childName}
+          topInset={insets.top}
+          onClose={handleClose}>
+          {fullChatBody}
+        </FullAssistantSheetBody>
+      ) : (
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={styles.backdrop}
+            onPress={handleClose}
+            accessibilityLabel="Close assistant"
+          />
+          <QuickAssistantSheetBody
+            colors={colors}
+            childName={childName}
+            user={user}
+            assistant={assistant}
+            isLoading={isLoading}
+            isAwaitingReply={isAwaitingReply}
+            onViewAll={handleViewAll}
+            onClose={handleClose}
+          />
+          {quickInputBar}
+        </View>
+      )}
+    </View>
+  );
+
+  if (!visible) {
+    return null;
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      {!isFull && (
-        <Pressable
-          style={styles.backdrop}
-          onPress={handleClose}
-          accessibilityLabel="Close assistant"
-        />
-      )}
-
-      {isFull ? (
-        <View style={styles.fullScreen}>{fullModeContent}</View>
-      ) : (
-        <KeyboardAvoidingView
-          style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          pointerEvents="box-none">
-          {quickModeContent}
-        </KeyboardAvoidingView>
-      )}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+      presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}>
+      <View
+        style={hideForPicker ? styles.hiddenForPicker : styles.flex}
+        pointerEvents={hideForPicker ? 'none' : 'auto'}>
+        {sheetContent}
+      </View>
     </Modal>
+  );
+}
+
+interface QuickAssistantSheetBodyProps {
+  colors: (typeof Colors)['light'];
+  childName: string | null;
+  user: ChatMessage | null;
+  assistant: ChatMessage | null;
+  isLoading: boolean;
+  isAwaitingReply: boolean;
+  onViewAll: () => void;
+  onClose: () => void;
+}
+
+function QuickAssistantSheetBody({
+  colors,
+  childName,
+  user,
+  assistant,
+  isLoading,
+  isAwaitingReply,
+  onViewAll,
+  onClose,
+}: QuickAssistantSheetBodyProps) {
+  const windowHeight = Dimensions.get('window').height;
+  const sheetMaxHeight = Math.max(windowHeight * 0.72, 220);
+
+  return (
+    <View style={styles.quickRoot} pointerEvents="box-none">
+      <View
+        style={[
+          styles.sheet,
+          styles.sheetQuick,
+          {
+            backgroundColor: colors.elevated,
+            borderColor: colors.border,
+            maxHeight: Math.min(sheetMaxHeight, windowHeight - Spacing.xl),
+          },
+        ]}>
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+              Assistant
+            </Text>
+            {childName ? (
+              <Text style={[styles.subtitle, { color: colors.muted }]}>
+                Quick log for {childName}
+              </Text>
+            ) : null}
+          </View>
+          <Pressable onPress={onViewAll} hitSlop={8} style={styles.viewAllBtn}>
+            <Text style={[styles.viewAllText, { color: colors.primary }]}>View all</Text>
+          </Pressable>
+          <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+            <Ionicons name="close" size={22} color={colors.muted} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          style={styles.messages}
+          contentContainerStyle={[
+            styles.messagesContent,
+            !user && !assistant && !isLoading && styles.messagesEmpty,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {isLoading ? (
+            <ActivityIndicator color={colors.primary} style={styles.loader} />
+          ) : (
+            <>
+              {!user && !assistant && (
+                <View style={styles.emptyHint}>
+                  <Text style={styles.emptyEmoji}>✨</Text>
+                  <Text
+                    style={[
+                      styles.emptyTitle,
+                      { color: colors.text, fontFamily: Fonts!.rounded },
+                    ]}>
+                    What happened today?
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+                    Tell me about feeds, naps, nappies, or a special moment — I'll log it for you.
+                  </Text>
+                </View>
+              )}
+              {user ? <MessageBubble message={user} /> : null}
+              {isAwaitingReply ? (
+                <TypingIndicator />
+              ) : assistant ? (
+                <MessageBubble message={assistant} />
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+function FullAssistantSheetBody({
+  colors,
+  childName,
+  topInset,
+  onClose,
+  children,
+}: {
+  colors: (typeof Colors)['light'];
+  childName: string | null;
+  topInset: number;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <View style={[styles.fullScreen, { paddingTop: topInset }]}>
+      <View style={[styles.sheet, styles.sheetFull, { backgroundColor: colors.elevated }]}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text
+              style={[
+                styles.title,
+                styles.titleFull,
+                { color: colors.text, fontFamily: Fonts!.rounded },
+              ]}>
+              Assistant
+            </Text>
+            {childName ? (
+              <Text style={[styles.subtitle, { color: colors.muted }]}>
+                Tell me about {childName}'s day
+              </Text>
+            ) : null}
+          </View>
+          <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+            <Ionicons name="close" size={22} color={colors.muted} />
+          </Pressable>
+        </View>
+
+        <View style={styles.flex}>{children}</View>
+      </View>
+    </View>
   );
 }
 
@@ -282,13 +388,7 @@ export function AssistantFab({ onPress }: AssistantFabProps) {
 
   return (
     <Pressable
-      style={[
-        styles.fab,
-        {
-          backgroundColor: colors.primary,
-          shadowColor: colors.primary,
-        },
-      ]}
+      style={[styles.fab, { backgroundColor: colors.primary }]}
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel="Open assistant">
@@ -297,32 +397,39 @@ export function AssistantFab({ onPress }: AssistantFabProps) {
   );
 }
 
-const SHEET_MAX_HEIGHT = Dimensions.get('window').height * 0.72;
-
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
-  keyboardAvoid: {
+  quickRoot: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   fullScreen: {
     flex: 1,
   },
-  sheet: {
-    overflow: 'hidden',
-  },
+  sheet: {},
   flex: { flex: 1 },
+  hiddenForPicker: {
+    flex: 1,
+    opacity: 0,
+  },
   sheetQuick: {
-    maxHeight: SHEET_MAX_HEIGHT,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   sheetFull: {
     flex: 1,
+  },
+  inputDock: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
   },
   handle: {
     alignSelf: 'center',
@@ -395,11 +502,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  inputWrapper: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.sm,
-  },
   viewerNotice: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
@@ -418,9 +520,10 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 5,
   },
 });

@@ -6,6 +6,7 @@ import {
   InteractionManager,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +14,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useKeyboardState } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { localDateString } from '@/services/chat';
@@ -83,6 +86,10 @@ export type AssistantChatContentProps = {
   sendQuickLog: (text: string) => Promise<void>;
   loadPreviousDay: () => Promise<void>;
   canWrite: boolean;
+  hideInput?: boolean;
+  onInputFocus?: () => void;
+  onBeforeNativePicker?: () => void | Promise<void>;
+  onAfterNativePicker?: () => void;
 };
 
 export function AssistantChatContent({
@@ -97,9 +104,21 @@ export function AssistantChatContent({
   sendQuickLog,
   loadPreviousDay,
   canWrite,
+  hideInput = false,
+  onInputFocus,
+  onBeforeNativePicker,
+  onAfterNativePicker,
 }: AssistantChatContentProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
+  const insets = useSafeAreaInsets();
+  // KeyboardProvider edge-to-edge can report bottom inset as 0 on Android;
+  // fall back so the input never sits under the system nav bar.
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 48 : 0);
+  const keyboardHeight = useKeyboardState((state) =>
+    state.isVisible ? state.height : 0,
+  );
+  const composerBottomPad = INPUT_BAR_PADDING + Math.max(keyboardHeight, bottomInset);
 
   const listData = useMemo(() => insertDaySeparators(messages), [messages]);
 
@@ -353,16 +372,20 @@ export function AssistantChatContent({
               backgroundColor: colors.elevated,
               borderTopColor: colors.border,
               paddingTop: INPUT_BAR_PADDING,
-              paddingBottom: INPUT_BAR_PADDING,
+              paddingBottom: composerBottomPad,
             },
+            hideInput && styles.hiddenInput,
           ]}>
-          {canWrite ? (
+          {canWrite && !hideInput ? (
             <ChatInput
               onSend={sendMessage}
               onQuickLog={handleQuickLog}
               disabled={isAwaitingReply}
+              onInputFocus={onInputFocus}
+              onBeforeNativePicker={onBeforeNativePicker}
+              onAfterNativePicker={onAfterNativePicker}
             />
-          ) : (
+          ) : canWrite ? null : (
             <View style={styles.viewerNotice}>
               <Text style={[styles.viewerNoticeText, { color: colors.muted }]}>
                 View-only access — you can read messages but cannot chat or log events.
@@ -403,6 +426,13 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  hiddenInput: {
+    height: 0,
+    overflow: 'hidden',
+    paddingTop: 0,
+    paddingBottom: 0,
+    borderTopWidth: 0,
   },
   viewerNotice: {
     paddingHorizontal: Spacing.md,
