@@ -85,6 +85,57 @@ export async function getChatMessagesByIds(
   return data ?? [];
 }
 
+export interface SendChatMessageArgs {
+  childId: string;
+  childName: string;
+  childDob: string;
+  message: string;
+}
+
+export interface SendChatMessageResult {
+  content: string | null;
+  loggedEvents: Record<string, unknown>[];
+}
+
+/**
+ * One-shot send used by the quick voice/text log sheet. Unlike `useChat`, this
+ * does not batch or stream — it persists the exchange and returns the reply.
+ */
+export async function sendChatMessage({
+  childId,
+  childName,
+  childDob,
+  message,
+}: SendChatMessageArgs): Promise<SendChatMessageResult> {
+  await saveChatMessage(childId, 'user', message, []);
+
+  const contextMessages = await getRecentChatContext(childId, 10).catch(() => []);
+
+  const { data, error } = await supabase.functions.invoke('chat', {
+    body: {
+      messages: [{ role: 'user', content: message }],
+      contextMessages: contextMessages
+        .filter((m) => m.content !== message)
+        .map((m) => ({ role: m.role, content: m.content })),
+      attachedMediaUrls: [],
+      child: { id: childId, name: childName, date_of_birth: childDob },
+      currentDate: localDateString(),
+    },
+  });
+
+  if (error) throw error;
+
+  const content: string | null = data?.content ?? null;
+  if (content) {
+    await saveChatMessage(childId, 'assistant', content, []).catch(() => {});
+  }
+
+  return {
+    content,
+    loggedEvents: (data?.loggedEvents ?? []) as Record<string, unknown>[],
+  };
+}
+
 export async function saveChatMessage(
   childId: string,
   role: 'user' | 'assistant',

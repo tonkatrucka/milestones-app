@@ -11,8 +11,6 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import * as MediaLibrary from 'expo-media-library';
-import ViewShot from 'react-native-view-shot';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
@@ -51,7 +49,7 @@ export default function ShareCardScreen() {
   const [isSharing, setIsSharing] = useState(false);
   const [isSavingToRoll, setIsSavingToRoll] = useState(false);
 
-  const cardRef = useRef<ViewShot>(null);
+  const cardRef = useRef<View>(null);
 
   useEffect(() => {
     if (!milestoneId) return;
@@ -81,13 +79,16 @@ export default function ShareCardScreen() {
     if (!cardRef.current || !milestone) return;
     setIsSavingToRoll(true);
     try {
+      const [{ captureRef }, MediaLibrary] = await Promise.all([
+        import('react-native-view-shot'),
+        import('expo-media-library'),
+      ]);
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission required', 'Please allow access to your photo library to save the card.');
         return;
       }
-      // @ts-expect-error – ViewShot capture is typed differently across versions
-      const uri: string = await cardRef.current.capture?.();
+      const uri = await captureRef(cardRef, { format: 'jpg', quality: 0.95 });
       if (!uri) { Alert.alert('Error', 'Could not capture card.'); return; }
       await MediaLibrary.saveToLibraryAsync(uri);
       Alert.alert('Saved!', 'Card saved to your camera roll.');
@@ -119,9 +120,9 @@ export default function ShareCardScreen() {
       <ScrollView
         contentContainerStyle={styles.previewContainer}
         showsVerticalScrollIndicator={false}>
-        <ViewShot ref={cardRef} options={{ format: 'jpg', quality: 0.95 }}>
+        <View ref={cardRef} collapsable={false}>
           <ShareCard milestone={milestone} child={activeChild} />
-        </ViewShot>
+        </View>
         <Text style={[styles.hint, { color: colors.muted }]}>
           Save to camera roll or share directly to Instagram, Messages, and more.
         </Text>

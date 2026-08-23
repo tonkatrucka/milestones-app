@@ -66,7 +66,7 @@ export function VoiceLogSheet({
       });
 
       if (result.loggedEvents && result.loggedEvents.length > 0) {
-        onActivityLogged?.(result.loggedEvents as DailyEvent[]);
+        onActivityLogged?.(result.loggedEvents as unknown as DailyEvent[]);
       }
       setLastResult(result.content ?? 'Logged!');
       setText('');

@@ -3,8 +3,6 @@
  * Uses expo-print (HTML → PDF) + expo-sharing.
  */
 
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { format, parseISO, differenceInMonths } from 'date-fns';
 import type { DailyEvent, GrowthEntry, Milestone, VaccinationRecord } from '@/lib/database.types';
 import { getEventDetail, EVENT_LABELS } from '@/lib/event-display';
@@ -177,8 +175,12 @@ function buildHtml(options: PdfExportOptions): string {
  * Generate and share a pediatrician-ready PDF for the given child.
  */
 export async function exportAndSharePdf(options: PdfExportOptions): Promise<void> {
+  const [{ printToFileAsync }, Sharing] = await Promise.all([
+    import('expo-print'),
+    import('expo-sharing'),
+  ]);
   const html = buildHtml(options);
-  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  const { uri } = await printToFileAsync({ html, base64: false });
   const canShare = await Sharing.isAvailableAsync();
   if (canShare) {
     await Sharing.shareAsync(uri, {

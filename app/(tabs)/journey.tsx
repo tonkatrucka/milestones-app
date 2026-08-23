@@ -13,11 +13,6 @@ import { JourneyTimeline } from '@/components/journey/JourneyTimeline';
 import { JourneyScreenSkeleton } from '@/components/journey/JourneyScreenSkeleton';
 import { deleteMemory } from '@/services/memories';
 import { deleteMilestone } from '@/services/milestones';
-import {
-  findOnThisDayMatches,
-  scheduleOnThisDayNotification,
-  scheduleMonthlyBirthdayPrompts,
-} from '@/services/on-this-day';
 import type { Memory, Milestone } from '@/lib/database.types';
 
 export default function JourneyScreen() {
@@ -40,20 +35,26 @@ export default function JourneyScreen() {
   useEffect(() => {
     if (!activeChild || sections.length === 0) return;
     const allMilestones = sections.flatMap((s) =>
-      s.entries.filter((e) => e.type === 'milestone').map((e) => e.milestone!),
+      s.entries.filter((e) => e.kind === 'milestone').map((e) => e.data),
     );
     const allMemories = sections.flatMap((s) =>
-      s.entries.filter((e) => e.type === 'memory').map((e) => e.memory!),
+      s.entries.filter((e) => e.kind === 'memory').map((e) => e.data),
     );
-    const matches = findOnThisDayMatches(allMilestones, allMemories);
-    scheduleOnThisDayNotification(matches, activeChild.name).catch(() => null);
+    void import('@/services/on-this-day')
+      .then((mod) => {
+        const matches = mod.findOnThisDayMatches(allMilestones, allMemories);
+        return mod.scheduleOnThisDayNotification(matches, activeChild.name);
+      })
+      .catch(() => null);
   }, [sections, activeChild]);
 
-  // Schedule monthly birthday prompts once when the child profile loads
   useEffect(() => {
     if (!activeChild) return;
-    scheduleMonthlyBirthdayPrompts(activeChild.date_of_birth, activeChild.name).catch(() => null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void import('@/services/on-this-day')
+      .then((mod) =>
+        mod.scheduleMonthlyBirthdayPrompts(activeChild.date_of_birth, activeChild.name),
+      )
+      .catch(() => null);
   }, [activeChild?.id]);
 
   const handleMilestoneDelete = useCallback(

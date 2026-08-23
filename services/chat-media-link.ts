@@ -51,10 +51,10 @@ export async function linkChatPhotosToRecentRecords(
   ]);
 
   if (memory && memory.media_urls.length === 0) {
-    await updateMemory(memory.id, { media_urls: urls });
+    await updateMemory(memory.id, { mediaUrls: urls });
   }
   if (milestone && milestone.media_urls.length === 0) {
-    await updateMilestone(milestone.id, { media_urls: urls });
+    await updateMilestone(milestone.id, { mediaUrls: urls });
   }
 }
 
@@ -113,7 +113,7 @@ export async function backfillChatPhotosForRecords(childId: string): Promise<voi
     if (memory.media_urls.length > 0) continue;
     const urls = await findChatPhotoNear(childId, memory.created_at);
     if (urls?.length) {
-      updates.push(updateMemory(memory.id, { media_urls: urls }));
+      updates.push(updateMemory(memory.id, { mediaUrls: urls }));
     }
   }
 
@@ -121,7 +121,7 @@ export async function backfillChatPhotosForRecords(childId: string): Promise<voi
     if (milestone.media_urls.length > 0) continue;
     const urls = await findChatPhotoNear(childId, milestone.created_at);
     if (urls?.length) {
-      updates.push(updateMilestone(milestone.id, { media_urls: urls }));
+      updates.push(updateMilestone(milestone.id, { mediaUrls: urls }));
     }
   }
 

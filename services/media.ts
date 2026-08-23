@@ -1,4 +1,3 @@
-import { File } from 'expo-file-system';
 import { EncodingType, readAsStringAsync } from 'expo-file-system/legacy';
 import { encodeStorageRef, storageBucketForObject, storageObjectPath } from '@/lib/media-ref';
 import { opaqueMediaPath } from '@/lib/media-path';
@@ -11,6 +10,7 @@ const MILESTONE_BUCKET = 'milestone-media';
 /** Read a local file URI into an ArrayBuffer — required for Supabase Storage on React Native. */
 export async function readUriAsArrayBuffer(localUri: string): Promise<ArrayBuffer> {
   try {
+    const { File } = await import('expo-file-system');
     return await new File(localUri).arrayBuffer();
   } catch {
     // Image-picker URIs (content://, ph://) often fail the new File API.

@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -439,7 +439,7 @@ export default function SettingsScreen() {
   const scheme = useColorScheme();
   const colors = Colors[scheme];
   const setColorScheme = useThemeStore((s) => s.setColorScheme);
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const router = useRouter();
   const { session, signOut } = useAuth();
   const { activeChild, children } = useActiveChild(session?.user.id ?? null);

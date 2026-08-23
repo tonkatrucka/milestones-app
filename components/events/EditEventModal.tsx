@@ -15,8 +15,12 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, EventColors, Fonts, Radius, Spacing, type AppPalette } from '@/constants/theme';
+import {
+  nativeThemeVariant,
+  useColorScheme,
+  type ColorSchemePreference,
+} from '@/hooks/use-color-scheme';
 import { updateEvent, deleteEvent } from '@/services/events';
 import { stopSleepTimer } from '@/services/sleep-timer';
 import type {
@@ -67,11 +71,11 @@ function eventSummary(event: DailyEvent): string {
   const meta = event.metadata as Record<string, unknown>;
   switch (event.type) {
     case 'nappy': {
-      const t = (meta as NappyMetadata).nappyType;
+      const t = (meta as unknown as NappyMetadata).nappyType;
       return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Nappy change';
     }
     case 'meal': {
-      const m = meta as MealMetadata;
+      const m = meta as unknown as MealMetadata;
       return formatMealDetail(m) || 'Meal';
     }
     case 'sleep': {
@@ -96,8 +100,8 @@ function TimePicker({
   label: string;
   value: Date;
   onChange: (d: Date) => void;
-  scheme: 'light' | 'dark';
-  colors: typeof Colors.light;
+  scheme: ColorSchemePreference;
+  colors: AppPalette;
   accent: string;
 }) {
   const [showAndroid, setShowAndroid] = useState(false);
@@ -110,7 +114,7 @@ function TimePicker({
           mode="time"
           display="spinner"
           onChange={(_, d) => d && onChange(d)}
-          themeVariant={scheme}
+          themeVariant={nativeThemeVariant(scheme)}
           style={modalStyles.iosPicker}
         />
       ) : (
@@ -251,7 +255,7 @@ export function EditEventModal({
           } else if (mealType === 'solid' || mealType === 'snack') {
             if (food) m.food = food;
           }
-          metadata = m as MealMetadata;
+          metadata = m as unknown as MealMetadata;
         }
       }
 

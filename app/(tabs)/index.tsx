@@ -10,9 +10,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { ChildAvatar } from '@/components/children/ChildAvatar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
@@ -58,7 +58,7 @@ function formatAge(dob: string): string {
 export default function HomeScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
   const { activeChild, children, isBootstrapping } = useActiveChild(session?.user.id ?? null);
@@ -295,7 +295,7 @@ export default function HomeScreen() {
 
         {/* Zone 1 — Quick log cards */}
         <View style={styles.cardsRow}>
-          {(['nappy', 'meal', 'sleep'] as EventType[]).map((type) => (
+          {(['nappy', 'meal', 'sleep'] as const).map((type) => (
             <QuickLogCard
               key={type}
               type={type}

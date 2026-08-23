@@ -42,6 +42,15 @@
         }
       ],
       [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Milestones to record voice notes on milestones and memories.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow Milestones to access your photos to capture milestone moments.",
@@ -68,11 +77,11 @@
           "bundleIdentifier": "com.milestones.app.widgets",
           "groupIdentifier": "group.com.tonkatrucka.milestones"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "router": {},

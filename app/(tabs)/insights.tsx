@@ -1,6 +1,6 @@
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { useRouter } from 'expo-router';
 import { differenceInMonths } from 'date-fns';
 import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
@@ -93,7 +93,7 @@ const suggestStyles = StyleSheet.create({
 export default function InsightsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
   const { activeChild, isBootstrapping } = useActiveChild(session?.user.id ?? null);

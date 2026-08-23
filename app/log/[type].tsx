@@ -14,8 +14,12 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { differenceInMinutes, format } from 'date-fns';
-import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, EventColors, Fonts, Radius, Spacing, type AppPalette } from '@/constants/theme';
+import {
+  nativeThemeVariant,
+  useColorScheme,
+  type ColorSchemePreference,
+} from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
@@ -61,8 +65,8 @@ function TimePicker({
   label: string;
   value: Date;
   onChange: (d: Date) => void;
-  scheme: 'light' | 'dark';
-  colors: typeof Colors.light;
+  scheme: ColorSchemePreference;
+  colors: AppPalette;
   accent: string;
 }) {
   const [showAndroid, setShowAndroid] = useState(false);
@@ -75,7 +79,7 @@ function TimePicker({
           mode="time"
           display="spinner"
           onChange={(_, d) => d && onChange(d)}
-          themeVariant={scheme}
+          themeVariant={nativeThemeVariant(scheme)}
           style={styles.iosPicker}
         />
       ) : (
@@ -378,7 +382,7 @@ export default function LogEventScreen() {
                     mode="time"
                     display="spinner"
                     onChange={(_, d) => d && setTime(d)}
-                    themeVariant={scheme}
+                    themeVariant={nativeThemeVariant(scheme)}
                     style={styles.iosPicker}
                   />
                 ) : (
@@ -520,7 +524,7 @@ export default function LogEventScreen() {
                           type: 'meal',
                           occurredAt: occurredAt ?? time,
                           notes: notes.trim() || undefined,
-                          metadata: meta as MealMetadata,
+                          metadata: meta as unknown as MealMetadata,
                           userId: session.user.id,
                         });
                         if (savedEvent) {

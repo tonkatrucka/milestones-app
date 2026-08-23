@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type ImageStyle, type StyleProp } from 'react-native';
 
 interface AppLogoProps {
   size?: number;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<ImageStyle>;
 }
 
 export function AppLogo({ size = 88, style }: AppLogoProps) {

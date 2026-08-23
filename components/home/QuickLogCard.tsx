@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { differenceInMinutes, format } from 'date-fns';
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { TimeSince } from '@/components/shared/TimeSince';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { nativeThemeVariant, useColorScheme } from '@/hooks/use-color-scheme';
 import { EVENT_LABELS, QUICK_LOG_EMOJIS } from '@/lib/event-display';
 import type { DailyEvent, EventType } from '@/lib/database.types';
 import type { LayoutRect } from '@/store/log-confirmation-store';
@@ -185,7 +185,7 @@ function EventWhenField({
           value={value}
           mode={activePicker}
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          themeVariant={scheme}
+          themeVariant={nativeThemeVariant(scheme)}
           onChange={onPickerChange}
         />
       )}
@@ -498,7 +498,7 @@ function SleepTooltipContent({
           value={pickerValue}
           mode={pickerMode}
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          themeVariant={scheme}
+          themeVariant={nativeThemeVariant(scheme)}
           onChange={onPickerChange}
         />
       )}

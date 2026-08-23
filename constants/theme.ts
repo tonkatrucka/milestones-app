@@ -54,7 +54,32 @@ const nightLayers = {
   elevated:   '#1A1812',   // barely warm tint, near-zero blue
 } as const;
 
-export const Colors = {
+export type ColorSchemeName = 'light' | 'dark' | 'night';
+
+/**
+ * Every scheme must expose the same keys, otherwise `Colors[scheme]` widens to a
+ * union of literal-typed palettes and every consumer fails to type-check.
+ */
+export interface AppPalette {
+  background: string;
+  surface: string;
+  inputBackground: string;
+  card: string;
+  elevated: string;
+  text: string;
+  tint: string;
+  icon: string;
+  tabIconDefault: string;
+  tabIconSelected: string;
+  primary: string;
+  secondary: string;
+  border: string;
+  muted: string;
+  danger: string;
+  onPrimary: string;
+}
+
+export const Colors: Record<ColorSchemeName, AppPalette> = {
   light: {
     ...lightLayers,
     text: PaletteNeutralsCool.charcoal,

@@ -29,7 +29,7 @@ import { getMilestoneReactions, upsertMilestoneReaction, deleteMilestoneReaction
 import { getMilestoneComments, addMilestoneComment } from '@/services/comments';
 import { createShareLink, buildShareLinkUrl } from '@/services/share-links';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
-import { VoiceRecorder } from '@/components/shared/VoiceRecorder';
+import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 import { ReactionBar } from '@/components/shared/ReactionBar';
 import type { Milestone, MilestoneCategory, MilestoneComment } from '@/lib/database.types';
 

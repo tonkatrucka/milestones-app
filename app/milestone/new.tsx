@@ -24,7 +24,7 @@ import { useAppStore } from '@/store/app-store';
 import { createMilestone } from '@/services/milestones';
 import { uploadMilestoneMedia, uploadAudioNote } from '@/services/media';
 import { CATEGORY_LABELS, CATEGORY_EMOJIS, getSuggestionsForAge } from '@/constants/milestone-templates';
-import { VoiceRecorder } from '@/components/shared/VoiceRecorder';
+import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 import { MilestoneCelebration } from '@/components/milestones/MilestoneCelebration';
 import type { MilestoneCategory } from '@/lib/database.types';
 

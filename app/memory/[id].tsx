@@ -132,9 +132,9 @@ export default function MemoryDetailScreen() {
       const updated = await updateMemory(id, {
         title: title.trim(),
         description: description.trim() || undefined,
-        occurred_at: occurredAt,
+        occurredAt,
         tags: parseTags(tags),
-        media_urls: mediaUrls,
+        mediaUrls,
       });
 
       setMemory(updated);

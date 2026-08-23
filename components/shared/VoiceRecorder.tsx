@@ -1,10 +1,9 @@
 /**
- * VoiceRecorder — a self-contained record/play/delete audio note component.
- * Uses expo-av for recording; uploads to Supabase Storage via the parent's
- * onRecordingComplete callback.
+ * VoiceRecorder — record / play / delete an audio note.
+ * Uses expo-audio (SDK 56). expo-av is removed — it crashes Android on launch.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +13,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -29,51 +36,35 @@ export interface VoiceRecorderProps {
 
 type RecorderState = 'idle' | 'requesting' | 'recording' | 'recorded' | 'playing';
 
-export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordingDeleted }: VoiceRecorderProps) {
+export function VoiceRecorder({
+  existingAudioUri,
+  onRecordingComplete,
+  onRecordingDeleted,
+}: VoiceRecorderProps) {
   const scheme = useColorScheme() ?? 'light';
-  const colors = Colors[scheme];
+  const colors = Colors[scheme] ?? Colors.light;
 
-  // Lazy initializers so we read prop only once at mount — avoids render-phase side effects
-  const [state, setState] = useState<RecorderState>(() => existingAudioUri ? 'recorded' : 'idle');
+  const [state, setState] = useState<RecorderState>(() =>
+    existingAudioUri ? 'recorded' : 'idle',
+  );
   const [localUri, setLocalUri] = useState<string | null>(() => existingAudioUri ?? null);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const [playbackPosition, setPlaybackPosition] = useState(0);
-  const [playbackDuration, setPlaybackDuration] = useState(0);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recorder = useAudioRecorder({
+    ...RecordingPresets.HIGH_QUALITY,
+    directory: 'document',
+  });
+  const recorderState = useAudioRecorderState(recorder, 250);
+  const player = useAudioPlayer(localUri);
+  const playerStatus = useAudioPlayerStatus(player);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => null);
-      }
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => null);
-      }
-      if (durationTimerRef.current) {
-        clearInterval(durationTimerRef.current);
-      }
-    };
-  }, []);
-
-  // No render-phase sync needed — state is lazily initialised from existingAudioUri above
-
-  const stopRecording = useCallback(async () => {
-    if (!recordingRef.current) return;
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current);
-      durationTimerRef.current = null;
-    }
+  const finishRecording = useCallback(async () => {
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await recorder.stop();
+      const uri = recorder.uri;
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       if (uri) {
         setLocalUri(uri);
+        player.replace(uri);
         setState('recorded');
         onRecordingComplete(uri);
       } else {
@@ -82,7 +73,23 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
     } catch {
       setState('idle');
     }
-  }, [onRecordingComplete]);
+  }, [onRecordingComplete, player, recorder]);
+
+  // Hard cap voice notes at 60s.
+  useEffect(() => {
+    if (state !== 'recording') return;
+    if (recorderState.durationMillis >= 60_000) {
+      void finishRecording();
+    }
+  }, [state, recorderState.durationMillis, finishRecording]);
+
+  useEffect(() => {
+    if (state !== 'playing') return;
+    if (playerStatus.didJustFinish) {
+      setState('recorded');
+      player.seekTo(0);
+    }
+  }, [state, playerStatus.didJustFinish, player]);
 
   const startRecording = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -91,7 +98,7 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
     }
     setState('requesting');
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
         Alert.alert(
           'Microphone access required',
@@ -101,70 +108,31 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setState('recording');
-      setRecordingDuration(0);
-      // Use a ref to stopRecording so the interval always calls the latest version
-      durationTimerRef.current = setInterval(() => {
-        setRecordingDuration((d) => {
-          if (d >= 60) {
-            // Fire-and-forget via ref to avoid stale closure
-            void stopRecording();
-            return d;
-          }
-          return d + 1;
-        });
-      }, 1000);
     } catch {
       Alert.alert('Error', 'Could not start recording. Please try again.');
       setState('idle');
     }
-  }, [stopRecording]);
+  }, [recorder]);
 
-  const playRecording = useCallback(async () => {
+  const playRecording = useCallback(() => {
     if (!localUri) return;
     setState('playing');
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: localUri },
-        { shouldPlay: true },
-        (status) => {
-          if (!status.isLoaded) return;
-          setPlaybackPosition(Math.round(status.positionMillis / 1000));
-          setPlaybackDuration(Math.round((status.durationMillis ?? 0) / 1000));
-          if (status.didJustFinish) {
-            setState('recorded');
-            setPlaybackPosition(0);
-          }
-        },
-      );
-      soundRef.current = sound;
-    } catch {
-      Alert.alert('Error', 'Could not play recording.');
-      setState('recorded');
-    }
-  }, [localUri]);
+    player.seekTo(0);
+    player.play();
+  }, [localUri, player]);
 
-  const stopPlayback = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.stopAsync().catch(() => null);
-      await soundRef.current.unloadAsync().catch(() => null);
-      soundRef.current = null;
-    }
+  const stopPlayback = useCallback(() => {
+    player.pause();
+    player.seekTo(0);
     setState('recorded');
-    setPlaybackPosition(0);
-  }, []);
+  }, [player]);
 
   const deleteRecording = useCallback(() => {
     Alert.alert('Delete voice note', 'Remove this voice note?', [
@@ -172,22 +140,25 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: async () => {
-          if (soundRef.current) {
-            await soundRef.current.unloadAsync().catch(() => null);
-            soundRef.current = null;
-          }
+        onPress: () => {
+          player.pause();
           setLocalUri(null);
-          setRecordingDuration(0);
-          setPlaybackPosition(0);
           setState('idle');
           onRecordingDeleted();
         },
       },
     ]);
-  }, [onRecordingDeleted]);
+  }, [onRecordingDeleted, player]);
 
-  const formatSecs = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const formatMillis = (ms: number) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const recordedDurationMs =
+    recorderState.durationMillis > 0
+      ? recorderState.durationMillis
+      : (playerStatus.duration ?? 0) * 1000;
 
   return (
     <View style={styles.container}>
@@ -210,10 +181,10 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
       {state === 'recording' && (
         <Pressable
           style={[styles.button, styles.recording, { backgroundColor: '#FF444422', borderColor: '#FF4444' }]}
-          onPress={stopRecording}>
+          onPress={finishRecording}>
           <Text style={styles.emoji}>⏹️</Text>
           <Text style={[styles.label, { color: '#FF4444' }]}>
-            Recording {formatSecs(recordingDuration)} — tap to stop
+            Recording {formatMillis(recorderState.durationMillis)} — tap to stop
           </Text>
           <View style={[styles.recordingDot, { backgroundColor: '#FF4444' }]} />
         </Pressable>
@@ -230,8 +201,10 @@ export function VoiceRecorder({ existingAudioUri, onRecordingComplete, onRecordi
             <Text style={[styles.playLabel, { color: colors.text }]}>Voice note</Text>
             <Text style={[styles.playTime, { color: colors.muted }]}>
               {state === 'playing'
-                ? `${formatSecs(playbackPosition)} / ${formatSecs(playbackDuration)}`
-                : recordingDuration > 0 ? formatSecs(recordingDuration) : '…'}
+                ? `${formatMillis((playerStatus.currentTime ?? 0) * 1000)} / ${formatMillis((playerStatus.duration ?? 0) * 1000)}`
+                : recordedDurationMs > 0
+                  ? formatMillis(recordedDurationMs)
+                  : '…'}
             </Text>
           </View>
           <Pressable onPress={deleteRecording} hitSlop={8}>

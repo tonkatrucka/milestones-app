@@ -20,7 +20,7 @@ import Animated, {
 import { Image } from 'expo-image';
 import { differenceInMonths, differenceInYears, format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 
 import { Colors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { ResolvedImage } from '@/components/media/ResolvedImage';
@@ -109,7 +109,7 @@ export function JourneyTimeline({
 }: JourneyTimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const [filter, setFilter] = useState<FilterMode>('all');
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
@@ -534,10 +534,6 @@ function SwipeableStoryCard({
     action();
   }, []);
 
-  if (!canWrite) {
-    return <View style={styles.swipeableContainer}>{children}</View>;
-  }
-
   const renderRightActions = useCallback(
     () => (
       <View style={styles.swipeActions}>
@@ -559,8 +555,14 @@ function SwipeableStoryCard({
         </Pressable>
       </View>
     ),
-    [closeAnd, colors.primary, onDelete, onEdit],
+    [closeAnd, colors.primary, colors.danger, onDelete, onEdit],
   );
+
+  // Must come after every hook: `canWrite` resolves asynchronously, so an early
+  // return above would change the hook count between renders.
+  if (!canWrite) {
+    return <View style={styles.swipeableContainer}>{children}</View>;
+  }
 
   return (
     <Swipeable
