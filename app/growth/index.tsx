@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { format, parseISO } from 'date-fns';
+import { formatMediumDate } from '@/lib/calendar-date';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -111,13 +111,12 @@ export default function GrowthScreen() {
             {entries.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>📏</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-                  Track growth
-                </Text>
-                <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-                  Log weight, height, and head circumference to see{' '}
-                  {activeChild?.name ?? 'your baby'}&apos;s growth over time.
-                </Text>
+              <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+                Watch them grow
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+                Weight, height, and head circumference — the numbers your paediatrician uses, always with you. Every measurement tells part of their story.
+              </Text>
                 {canWrite && (
                   <Pressable
                     style={[styles.emptyButton, { backgroundColor: colors.primary }]}
@@ -156,7 +155,7 @@ export default function GrowthScreen() {
 
                 <Text style={[styles.sectionLabel, { color: colors.muted }]}>MEASUREMENTS</Text>
                 {entries.map((entry) => {
-                  const dateLabel = format(parseISO(entry.measured_at), 'd MMM yyyy');
+                    const dateLabel = formatMediumDate(entry.measured_at);
                   return (
                     <Pressable
                       key={entry.id}

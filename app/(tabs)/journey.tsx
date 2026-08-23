@@ -98,7 +98,7 @@ export default function JourneyScreen() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
         <View style={styles.centred}>
-          <Text style={styles.emptyEmoji}>🗺️</Text>
+          <Text style={styles.emptyEmoji}>📖</Text>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No child selected</Text>
         </View>
       </SafeAreaView>
@@ -113,7 +113,7 @@ export default function JourneyScreen() {
             style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}
             numberOfLines={1}
             adjustsFontSizeToFit>
-            {activeChild.name}&apos;s Journey
+            {activeChild.name}&apos;s Journal
           </Text>
         </View>
         {canWrite && (

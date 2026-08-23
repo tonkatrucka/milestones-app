@@ -215,10 +215,12 @@ export function JourneyTimeline({
 
       {filteredSections.length === 0 && !isLoading && (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🗺️</Text>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>The journey begins here</Text>
+          <Text style={styles.emptyEmoji}>📖</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            This is where their story lives
+          </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Add milestones and memories to build your timeline.
+            Start with their first smile, first step, or any moment that mattered. Every entry becomes part of a keepsake they&apos;ll have forever.
           </Text>
         </View>
       )}

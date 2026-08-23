@@ -96,7 +96,10 @@ export function WellbeingPrompt({
             30 seconds — just for you.
           </Text>
         </View>
-        <Pressable onPress={onDismiss} accessibilityLabel="Dismiss wellbeing check-in">
+        <Pressable
+          onPress={onDismiss}
+          accessibilityLabel="Dismiss wellbeing check-in"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={[styles.dismissText, { color: colors.muted }]}>Later</Text>
         </Pressable>
       </View>

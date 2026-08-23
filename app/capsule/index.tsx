@@ -136,10 +136,10 @@ export default function TimeCapsuleScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyEmoji}>⏳</Text>
           <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            Write to the future
+            A letter to the future
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Seal a letter, voice note, or memory for your child to open on a special future date.
+            Write to who they&apos;ll become. Seal it for their 18th birthday, their first day of school, or any moment that feels right. They&apos;ll treasure it.
           </Text>
           <Pressable
             style={[styles.emptyBtn, { backgroundColor: colors.primary }]}

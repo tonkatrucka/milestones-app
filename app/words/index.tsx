@@ -115,10 +115,10 @@ export default function FirstWordsScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyEmoji}>💬</Text>
           <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            Start their dictionary
+            Their first dictionary
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Log each new word as they say it — phonetic notes optional.
+            Every word is a miracle. Log them as they come — what they say, how they actually say it, and when it first happened.
           </Text>
           {canWrite && (
             <Pressable

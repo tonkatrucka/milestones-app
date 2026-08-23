@@ -87,6 +87,7 @@ export default function HomeScreen() {
   const [showAssistant, setShowAssistant] = useState(false);
   const [showVoiceLog, setShowVoiceLog] = useState(false);
   const [showHandoff, setShowHandoff] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [highlightEventId, setHighlightEventId] = useState<string | null>(null);
   const [recentEvents, setRecentEvents] = useState<DailyEvent[]>([]);
   const [showWellbeing, setShowWellbeing] = useState(false);
@@ -292,7 +293,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Quick log cards */}
+        {/* Zone 1 — Quick log cards */}
         <View style={styles.cardsRow}>
           {(['nappy', 'meal', 'sleep'] as EventType[]).map((type) => (
             <QuickLogCard
@@ -308,44 +309,48 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* Secondary quick actions */}
+        {/* More actions — collapsed by default, tap to expand */}
         {canWrite && (
-          <View style={styles.secondaryRow}>
-            {(['pump', 'temperature', 'medication'] as EventType[]).map((type) => (
-              <Pressable
-                key={type}
-                style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
-                onPress={() => router.push(`/log/${type}` as never)}>
-                <Text style={styles.secondaryChipEmoji}>
-                  {type === 'pump' ? '🤱' : type === 'temperature' ? '🌡️' : '💊'}
-                </Text>
-                <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
+          <View>
             <Pressable
-              style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
-              onPress={() => setShowHandoff(true)}>
-              <Text style={styles.secondaryChipEmoji}>🤝</Text>
-              <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>Handoff</Text>
+              style={[styles.moreActionsToggle, { borderColor: colors.border }]}
+              onPress={() => setShowMoreActions((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showMoreActions ? 'Hide more actions' : 'Show more actions'}>
+              <Text style={[styles.moreActionsLabel, { color: colors.muted }]}>
+                {showMoreActions ? '▲ Less' : '▼ Pump · Temp · Meds · Handoff'}
+              </Text>
             </Pressable>
+            {showMoreActions && (
+              <View style={styles.secondaryRow}>
+                {(['pump', 'temperature', 'medication'] as EventType[]).map((type) => (
+                  <Pressable
+                    key={type}
+                    style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+                    onPress={() => router.push(`/log/${type}` as never)}>
+                    <Text style={styles.secondaryChipEmoji}>
+                      {type === 'pump' ? '🤱' : type === 'temperature' ? '🌡️' : '💊'}
+                    </Text>
+                    <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+                <Pressable
+                  style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+                  onPress={() => setShowHandoff(true)}>
+                  <Text style={styles.secondaryChipEmoji}>🤝</Text>
+                  <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>Handoff</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         )}
 
-        {/* Nap prediction */}
+        {/* Zone 2 — Status at a glance */}
         <NapPredictionCard prediction={prediction} />
 
-        {/* Parent wellbeing */}
-        {showWellbeing && !wellbeingDismissed && session?.user.id && activeChildId && (
-          <WellbeingPrompt
-            userId={session.user.id}
-            childId={activeChildId}
-            onCheckedIn={() => setShowWellbeing(false)}
-            onDismiss={() => { setShowWellbeing(false); setWellbeingDismissed(true); }}
-          />
-        )}
-
+        {/* Zone 3 — Today's log history */}
         <View ref={feedRef} onLayout={measureTimelineTop} collapsable={false}>
           <TodayFeed
             events={todayEvents}
@@ -355,6 +360,16 @@ export default function HomeScreen() {
             onEventLongPress={canWrite ? setEditingEvent : undefined}
           />
         </View>
+
+        {/* Wellbeing prompt at the bottom of the feed — gentle, not intrusive */}
+        {showWellbeing && !wellbeingDismissed && session?.user.id && activeChildId && (
+          <WellbeingPrompt
+            userId={session.user.id}
+            childId={activeChildId}
+            onCheckedIn={() => setShowWellbeing(false)}
+            onDismiss={() => { setShowWellbeing(false); setWellbeingDismissed(true); }}
+          />
+        )}
       </ScrollView>
 
       <EditEventModal
@@ -367,15 +382,7 @@ export default function HomeScreen() {
     </SafeAreaView>
 
       {!showAssistant && !showVoiceLog && (
-        <View style={styles.fabRow}>
-          <Pressable
-            style={[styles.voiceFab, { backgroundColor: colors.elevated, borderColor: colors.border }]}
-            onPress={() => setShowVoiceLog(true)}
-            accessibilityLabel="Quick voice log">
-            <Text style={styles.voiceFabEmoji}>🎙️</Text>
-          </Pressable>
-          <AssistantFab onPress={openAssistant} />
-        </View>
+        <AssistantFab onPress={openAssistant} />
       )}
 
       {Platform.OS !== 'android' && (
@@ -463,49 +470,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
+  moreActionsToggle: {
+    alignSelf: 'center',
+    borderRadius: Radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  moreActionsLabel: { fontSize: 12, fontWeight: '600' },
   secondaryRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
     flexWrap: 'wrap',
+    paddingTop: Spacing.sm,
   },
   secondaryChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 20,
+    borderRadius: Radius.full,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    minHeight: 36,
   },
   secondaryChipEmoji: { fontSize: 14 },
   secondaryChipLabel: { fontSize: 13, fontWeight: '600' },
-  fabRow: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    left: 0,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
-    paddingRight: Spacing.md,
-    paddingBottom: Spacing.lg,
-    pointerEvents: 'box-none',
-  },
-  voiceFab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  voiceFabEmoji: { fontSize: 22 },
   addChildButton: {
     margin: Spacing.lg,
     borderRadius: 12,

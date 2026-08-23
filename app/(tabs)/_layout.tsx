@@ -38,27 +38,27 @@ export default function TabLayout() {
       <Tabs.Screen
         name="activities"
         options={{
-          title: 'Activities',
+          title: 'Log',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'list' : 'list-outline'} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="journey"
         options={{
-          title: 'Journey',
+          title: 'Journal',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'map' : 'map-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'book' : 'book-outline'} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="insights"
         options={{
-          title: 'Insights',
+          title: 'Explore',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'bulb' : 'bulb-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={24} color={color} />
           ),
         }}
       />

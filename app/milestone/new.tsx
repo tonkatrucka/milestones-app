@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +25,7 @@ import { createMilestone } from '@/services/milestones';
 import { uploadMilestoneMedia, uploadAudioNote } from '@/services/media';
 import { CATEGORY_LABELS, CATEGORY_EMOJIS, getSuggestionsForAge } from '@/constants/milestone-templates';
 import { VoiceRecorder } from '@/components/shared/VoiceRecorder';
+import { MilestoneCelebration } from '@/components/milestones/MilestoneCelebration';
 import type { MilestoneCategory } from '@/lib/database.types';
 
 const CATEGORIES: MilestoneCategory[] = ['language', 'movement', 'development'];
@@ -66,14 +67,48 @@ export default function NewMilestoneScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [audioLocalUri, setAudioLocalUri] = useState<string | null>(null);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [savedMilestoneId, setSavedMilestoneId] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const accent = MilestoneColors[category];
 
   const ageMonths = activeChild
     ? differenceInMonths(new Date(), new Date(activeChild.date_of_birth))
     : null;
+
+  const ageLabel = ageMonths !== null
+    ? ageMonths < 12
+      ? `${ageMonths} month${ageMonths !== 1 ? 's' : ''} old`
+      : `${Math.floor(ageMonths / 12)} year${Math.floor(ageMonths / 12) !== 1 ? 's' : ''} old`
+    : undefined;
+
+  const handleCelebrationDismiss = useCallback(() => {
+    setShowCelebration(false);
+    router.back();
+  }, [router]);
+
+  const canAdvanceStep1 = title.trim().length > 0 && parseDateInput(date) !== null;
+
+  const advanceStep = useCallback(() => {
+    if (step === 1 && !canAdvanceStep1) {
+      Alert.alert('Almost there', 'Please add a title and a valid date (DD/MM/YYYY).');
+      return;
+    }
+    if (step < 3) setStep((s) => (s + 1) as 1 | 2 | 3);
+  }, [step, canAdvanceStep1]);
+
+  const handleCelebrationShare = useCallback(() => {
+    setShowCelebration(false);
+    if (savedMilestoneId) {
+      router.replace({
+        pathname: '/share/card' as never,
+        params: { milestoneId: savedMilestoneId },
+      });
+    }
+  }, [router, savedMilestoneId]);
 
   const suggestions = ageMonths !== null ? getSuggestionsForAge(ageMonths, category) : [];
 
@@ -142,7 +177,7 @@ export default function NewMilestoneScreen() {
         audioUrl = await uploadAudioNote(activeChildId, audioLocalUri);
       }
 
-      await createMilestone({
+      const saved = await createMilestone({
         childId: activeChildId,
         category,
         title: title.trim(),
@@ -154,13 +189,23 @@ export default function NewMilestoneScreen() {
         userId: session.user.id,
       });
 
-      router.back();
+      setSavedMilestoneId(saved.id);
+      setShowCelebration(true);
     } catch (e: unknown) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save milestone.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // ── Step indicator dots ───────────────────────────────────────────────────
+  const stepDots = (
+    <View style={styles.stepDots}>
+      {([1, 2, 3] as const).map((s) => (
+        <View key={s} style={[styles.stepDot, { backgroundColor: s === step ? accent : colors.border }]} />
+      ))}
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -170,14 +215,40 @@ export default function NewMilestoneScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-          New Milestone
-        </Text>
+
+        {/* Step navigation */}
+        <View style={styles.stepHeader}>
+          {step > 1 ? (
+            <Pressable onPress={() => setStep((s) => (s - 1) as 1 | 2 | 3)} hitSlop={12}>
+              <Text style={[styles.backText, { color: colors.muted }]}>← Back</Text>
+            </Pressable>
+          ) : <View style={styles.stepSpacer} />}
+          {stepDots}
+          <View style={styles.stepSpacer} />
+        </View>
+
+        {/* ── Step 1: The moment ─────────────────────────────────────────────── */}
+        {step === 1 && (
+          <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            What happened?
+          </Text>
+        )}
+        {step === 2 && (
+          <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            Tell the story
+          </Text>
+        )}
+        {step === 3 && (
+          <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            Add photos
+          </Text>
+        )}
         {activeChild && (
           <Text style={[styles.subtitle, { color: colors.muted }]}>for {activeChild.name}</Text>
         )}
 
-        {/* Category */}
+        {/* ── Category (step 1) ─────────────────────────────────────────────── */}
+        {step === 1 && (
         <View>
           <Text style={[styles.fieldLabel, { color: colors.muted }]}>Category</Text>
           <View style={styles.categoryRow}>
@@ -201,9 +272,10 @@ export default function NewMilestoneScreen() {
             })}
           </View>
         </View>
+        )}
 
-        {/* Template suggestions for current age */}
-        {suggestions.length > 0 && (
+        {/* ── Suggestions + Title + Date (step 1) ──────────────────────────── */}
+        {step === 1 && suggestions.length > 0 && (
           <View>
             <Text style={[styles.fieldLabel, { color: colors.muted }]}>
               Suggestions for {ageMonths} month{ageMonths !== 1 ? 's' : ''}
@@ -224,115 +296,164 @@ export default function NewMilestoneScreen() {
           </View>
         )}
 
-        {/* Title */}
-        <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Title</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder={`E.g. ${CATEGORY_EMOJIS[category]} First ${category}`}
-            placeholderTextColor={colors.muted}
-            value={title}
-            onChangeText={setTitle}
-            returnKeyType="next"
-          />
-        </View>
+        {step === 1 && (
+          <View>
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Title</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+              placeholder={`E.g. ${CATEGORY_EMOJIS[category]} First ${category}`}
+              placeholderTextColor={colors.muted}
+              value={title}
+              onChangeText={setTitle}
+              returnKeyType="next"
+            />
+          </View>
+        )}
 
-        {/* Date */}
-        <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date achieved</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="DD/MM/YYYY"
-            placeholderTextColor={colors.muted}
-            value={date}
-            onChangeText={(v) => setDate(formatDateInput(v))}
-            keyboardType="numeric"
-          />
-        </View>
+        {step === 1 && (
+          <View>
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date achieved</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={colors.muted}
+              value={date}
+              onChangeText={(v) => setDate(formatDateInput(v))}
+              keyboardType="numeric"
+            />
+          </View>
+        )}
 
-        {/* Description + AI story */}
-        <View>
-          <View style={styles.fieldLabelRow}>
-            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Story (optional)</Text>
-            {title.trim().length > 0 && (
-              <Pressable
-                style={[styles.aiButton, { borderColor: accent }]}
-                onPress={generateStory}
-                disabled={isGeneratingStory}>
-                {isGeneratingStory
-                  ? <ActivityIndicator size="small" color={accent} />
-                  : <Text style={[styles.aiButtonText, { color: accent }]}>✨ Write story</Text>}
-              </Pressable>
+        {/* ── Story + Voice (step 2) ──────────────────────────────────────── */}
+        {step === 2 && (
+          <View>
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Story (optional)</Text>
+              {title.trim().length > 0 && (
+                <Pressable
+                  style={[styles.aiButton, { borderColor: accent }]}
+                  onPress={generateStory}
+                  disabled={isGeneratingStory}>
+                  {isGeneratingStory
+                    ? <ActivityIndicator size="small" color={accent} />
+                    : <Text style={[styles.aiButtonText, { color: accent }]}>✨ Write story</Text>}
+                </Pressable>
+              )}
+            </View>
+            <TextInput
+              style={[styles.input, styles.textarea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+              placeholder="What happened? How did it feel?"
+              placeholderTextColor={colors.muted}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+            />
+          </View>
+        )}
+
+        {step === 2 && (
+          <View>
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Voice note (optional)</Text>
+            <VoiceRecorder
+              onRecordingComplete={setAudioLocalUri}
+              onRecordingDeleted={() => setAudioLocalUri(null)}
+            />
+          </View>
+        )}
+
+        {/* ── Photos + Private + Save (step 3) ──────────────────────────── */}
+        {step === 3 && (
+          <View>
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Photos (up to 5)</Text>
+            <View style={styles.photoRow}>
+              {photos.map((uri, i) => (
+                <Pressable key={i} onLongPress={() => setPhotos((p) => p.filter((_, idx) => idx !== i))}>
+                  <Image source={{ uri }} style={styles.photoThumb} contentFit="cover" />
+                </Pressable>
+              ))}
+              {photos.length < 5 && (
+                <Pressable
+                  style={[styles.addPhotoButton, { backgroundColor: accent + '22' }]}
+                  onPress={pickPhoto}>
+                  <Text style={[styles.addPhotoIcon, { color: accent }]}>+</Text>
+                </Pressable>
+              )}
+            </View>
+            {photos.length > 0 && (
+              <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
             )}
           </View>
-          <TextInput
-            style={[styles.input, styles.textarea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="What happened? How did it feel?"
-            placeholderTextColor={colors.muted}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-          />
-        </View>
+        )}
 
-        {/* Voice note */}
-        <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Voice note (optional)</Text>
-          <VoiceRecorder
-            onRecordingComplete={setAudioLocalUri}
-            onRecordingDeleted={() => setAudioLocalUri(null)}
-          />
-        </View>
+        {step === 3 && (
+          <Pressable
+            style={[styles.privateToggle, { borderColor: colors.border, backgroundColor: isPrivate ? colors.primary + '15' : colors.elevated }]}
+            onPress={() => setIsPrivate((v) => !v)}>
+            <Text style={styles.privateEmoji}>{isPrivate ? '🔒' : '👁️'}</Text>
+            <View style={styles.privateInfo}>
+              <Text style={[styles.privateTitle, { color: colors.text }]}>
+                {isPrivate ? 'Private milestone' : 'Shared with team'}
+              </Text>
+              <Text style={[styles.privateSubtitle, { color: colors.muted }]}>
+                {isPrivate ? 'Only you can see this' : 'Visible to all caregivers and viewers'}
+              </Text>
+            </View>
+          </Pressable>
+        )}
 
-        {/* Photos */}
-        <View>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Photos (up to 5)</Text>
-          <View style={styles.photoRow}>
-            {photos.map((uri, i) => (
-              <Pressable key={i} onLongPress={() => setPhotos((p) => p.filter((_, idx) => idx !== i))}>
-                <Image source={{ uri }} style={styles.photoThumb} contentFit="cover" />
-              </Pressable>
-            ))}
-            {photos.length < 5 && (
-              <Pressable
-                style={[styles.addPhotoButton, { backgroundColor: accent + '22' }]}
-                onPress={pickPhoto}>
-                <Text style={[styles.addPhotoIcon, { color: accent }]}>+</Text>
-              </Pressable>
+        {/* Step 1 → 2 */}
+        {step === 1 && (
+          <>
+            <Pressable
+              style={[styles.nextButton, { backgroundColor: accent }, !canAdvanceStep1 && { opacity: 0.45 }]}
+              onPress={advanceStep}>
+              <Text style={styles.nextButtonText}>Next →</Text>
+            </Pressable>
+            <Pressable style={styles.skipLink} onPress={handleSave} disabled={isLoading}>
+              {isLoading
+                ? <ActivityIndicator color={colors.muted} />
+                : <Text style={[styles.skipText, { color: colors.muted }]}>Save without story or photos</Text>}
+            </Pressable>
+          </>
+        )}
+
+        {/* Step 2 → 3 */}
+        {step === 2 && (
+          <>
+            <Pressable style={[styles.nextButton, { backgroundColor: accent }]} onPress={advanceStep}>
+              <Text style={styles.nextButtonText}>Next: Add photos →</Text>
+            </Pressable>
+            <Pressable style={styles.skipLink} onPress={handleSave} disabled={isLoading}>
+              {isLoading
+                ? <ActivityIndicator color={colors.muted} />
+                : <Text style={[styles.skipText, { color: colors.muted }]}>Save without photos</Text>}
+            </Pressable>
+          </>
+        )}
+
+        {/* Step 3 save */}
+        {step === 3 && (
+          <Pressable
+            style={[styles.saveButton, { backgroundColor: accent }, isLoading && { opacity: 0.7 }]}
+            onPress={handleSave}
+            disabled={isLoading}>
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save milestone 🌟</Text>
             )}
-          </View>
-          {photos.length > 0 && (
-            <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
-          )}
-        </View>
-
-        {/* Private toggle */}
-        <Pressable
-          style={[styles.privateToggle, { borderColor: colors.border, backgroundColor: isPrivate ? colors.primary + '15' : colors.elevated }]}
-          onPress={() => setIsPrivate((v) => !v)}>
-          <Text style={styles.privateEmoji}>{isPrivate ? '🔒' : '👁️'}</Text>
-          <View style={styles.privateInfo}>
-            <Text style={[styles.privateTitle, { color: colors.text }]}>
-              {isPrivate ? 'Private milestone' : 'Shared with team'}
-            </Text>
-            <Text style={[styles.privateSubtitle, { color: colors.muted }]}>
-              {isPrivate ? 'Only you can see this' : 'Visible to all caregivers and viewers'}
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={[styles.saveButton, { backgroundColor: accent }, isLoading && { opacity: 0.7 }]}
-          onPress={handleSave}
-          disabled={isLoading}>
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save milestone</Text>
-          )}
-        </Pressable>
+          </Pressable>
+        )}
       </ScrollView>
+      <MilestoneCelebration
+        visible={showCelebration}
+        title={title}
+        category={category}
+        ageLabel={ageLabel}
+        onDismiss={handleCelebrationDismiss}
+        onShare={handleCelebrationShare}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -340,7 +461,16 @@ export default function NewMilestoneScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: 60 },
-  title: { fontSize: 26, fontWeight: '800', marginTop: Spacing.sm },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
+  stepDots: { flexDirection: 'row', gap: 6 },
+  stepDot: { width: 8, height: 8, borderRadius: 4 },
+  stepSpacer: { width: 40 },
+  backText: { fontSize: 14, fontWeight: '600' },
+  nextButton: { borderRadius: Radius.md, paddingVertical: Spacing.md, alignItems: 'center', minHeight: 52, justifyContent: 'center' },
+  nextButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  skipLink: { alignItems: 'center', paddingVertical: Spacing.sm, minHeight: 36 },
+  skipText: { fontSize: 14 },
+  title: { fontSize: 26, fontWeight: '800' },
   subtitle: { fontSize: 15, marginTop: -Spacing.md },
   fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: Spacing.xs, letterSpacing: 0.3 },
   fieldLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },

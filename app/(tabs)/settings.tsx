@@ -716,11 +716,15 @@ export default function SettingsScreen() {
             Choose how Milestones looks on this device.
           </Text>
           <View style={[styles.schemeRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {(['light', 'dark'] as ColorSchemePreference[]).map((option) => {
-              const active = scheme === option;
+            {([
+              { value: 'light', icon: 'sunny-outline', label: 'Light' },
+              { value: 'dark', icon: 'moon-outline', label: 'Dark' },
+              { value: 'night', icon: 'star-outline', label: 'Night' },
+            ] as { value: ColorSchemePreference; icon: string; label: string }[]).map((option) => {
+              const active = scheme === option.value;
               return (
                 <Pressable
-                  key={option}
+                  key={option.value}
                   style={[
                     styles.schemeOption,
                     active && {
@@ -728,12 +732,12 @@ export default function SettingsScreen() {
                       borderColor: colors.primary,
                     },
                   ]}
-                  onPress={() => setColorScheme(option)}
+                  onPress={() => setColorScheme(option.value)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}>
                   <Ionicons
-                    name={option === 'light' ? 'sunny-outline' : 'moon-outline'}
-                    size={20}
+                    name={option.icon as 'sunny-outline'}
+                    size={18}
                     color={active ? colors.primary : colors.muted}
                   />
                   <Text
@@ -742,15 +746,18 @@ export default function SettingsScreen() {
                       { color: active ? colors.text : colors.muted },
                       active && styles.schemeOptionTextActive,
                     ]}>
-                    {option === 'light' ? 'Light' : 'Dark'}
+                    {option.label}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
+          {scheme === 'night' && (
+            <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
+              🌙 True black OLED screen. Warm amber tones. Designed so your eyes adjust back to sleep faster.
+            </Text>
+          )}
         </Section>
-
-        <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
 
         {activeChild && isOwner && (
           <DigestFollowersSection
@@ -760,9 +767,11 @@ export default function SettingsScreen() {
           />
         )}
 
-        <Section title="Child health" colors={colors}>
+        <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
+
+        <Section title="Health & Records" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            Track growth, vaccinations, and solid food introduction.
+            Growth, health tracking, first words, vaccinations, and keepsakes.
           </Text>
           {[
             { label: 'Growth tracker', emoji: '📏', path: '/growth/index' },
@@ -1266,8 +1275,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1.5,
     paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,    // raised from xs (4) to sm (8) → ~34px
+    minHeight: 36,
     flexShrink: 0,
+    justifyContent: 'center',
   },
   editButtonText: {
     fontSize: 13,

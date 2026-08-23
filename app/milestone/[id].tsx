@@ -16,6 +16,7 @@ import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
+import { formatShortDate, formatFullDate, formatMediumDate } from '@/lib/calendar-date';
 import { Colors, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { parseCalendarDate } from '@/lib/calendar-date';
@@ -446,7 +447,7 @@ export default function MilestoneDetailScreen() {
               <View key={c.id} style={[styles.commentRow, { backgroundColor: colors.elevated }]}>
                 <Text style={[styles.commentBody, { color: colors.text }]}>{c.body}</Text>
                 <Text style={[styles.commentMeta, { color: colors.muted }]}>
-                  {format(new Date(c.created_at), 'MMM d, h:mm a')}
+                  {formatShortDate(c.created_at)}, {format(new Date(c.created_at), 'h:mm a')}
                 </Text>
               </View>
             ))}

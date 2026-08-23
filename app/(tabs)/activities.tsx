@@ -66,7 +66,7 @@ export default function ActivitiesScreen() {
           style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}
           numberOfLines={1}
           adjustsFontSizeToFit>
-          {activeChild.name}'s Activities
+          {activeChild.name}&apos;s Log
         </Text>
         <SegmentedToggle
           options={[

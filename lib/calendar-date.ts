@@ -1,5 +1,36 @@
 import { format, parseISO } from 'date-fns';
 
+// ─── Consistent display date helpers ────────────────────────────────────────
+// Use these everywhere instead of ad-hoc format() calls to keep dates coherent
+// across all screens.
+
+/**
+ * Short date for timelines and compact UI — e.g. "23 Aug"
+ * Omits the year when the date is in the current calendar year.
+ */
+export function formatShortDate(value: string | Date): string {
+  const d = typeof value === 'string' ? parseCalendarDate(value) : value;
+  const thisYear = new Date().getFullYear();
+  if (d.getFullYear() === thisYear) return format(d, 'd MMM');
+  return format(d, 'd MMM yyyy');
+}
+
+/**
+ * Full date for detail screens and forms — e.g. "23 August 2025"
+ */
+export function formatFullDate(value: string | Date): string {
+  const d = typeof value === 'string' ? parseCalendarDate(value) : value;
+  return format(d, 'd MMMM yyyy');
+}
+
+/**
+ * Medium date — e.g. "23 Aug 2025" — for lists that may span years.
+ */
+export function formatMediumDate(value: string | Date): string {
+  const d = typeof value === 'string' ? parseCalendarDate(value) : value;
+  return format(d, 'd MMM yyyy');
+}
+
 /**
  * Parse a calendar date (milestones, memories, DOB) as local midnight.
  * Accepts plain "YYYY-MM-DD" strings and ISO timestamps — always uses the

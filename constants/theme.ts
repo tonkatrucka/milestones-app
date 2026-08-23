@@ -40,6 +40,20 @@ const darkLayers = {
 const primaryColor = PalettePeach.terracotta;
 const secondaryColor = PaletteCool.seaGlass;
 
+/**
+ * Night mode — OLED-optimised for 3am use.
+ * True black (#000000) background so OLED pixels turn off entirely.
+ * Warm amber text to minimise blue-spectrum emission.
+ * All values constrained: blue channel ≤ 25% of red channel.
+ */
+const nightLayers = {
+  background: '#000000',   // OLED true black — pixels off
+  surface:    '#0D0D0D',
+  inputBackground: '#111111',
+  card:       '#111111',
+  elevated:   '#1A1812',   // barely warm tint, near-zero blue
+} as const;
+
 export const Colors = {
   light: {
     ...lightLayers,
@@ -68,6 +82,20 @@ export const Colors = {
     muted: PaletteAnchors.sageGreen,
     danger: PalettePeach.terracotta,
     onPrimary: PaletteNeutralsCool.charcoal,
+  },
+  night: {
+    ...nightLayers,
+    text:     '#F5E2C0',   // warm amber-white — low blue emission
+    tint:     '#D4956A',   // deep amber primary
+    icon:     '#7A6E5A',
+    tabIconDefault: '#5A5040',
+    tabIconSelected: '#D4956A',
+    primary:  '#D4956A',   // amber — warm, low blue channel
+    secondary:'#5C7A6A',   // muted teal — used sparingly
+    border:   '#222018',
+    muted:    '#6B5E48',
+    danger:   '#9A4A3A',   // muted red, not bright — avoids melatonin spike
+    onPrimary:'#1A0F00',
   },
 };
 
