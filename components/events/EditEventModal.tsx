@@ -45,8 +45,14 @@ type ModalMode = 'actions' | 'edit';
 
 const NAPPY_TYPES: NappyMetadata['nappyType'][] = ['wet', 'dirty', 'both', 'dry'];
 const MEAL_TYPES: MealMetadata['mealType'][] = ['breast', 'bottle', 'solid', 'snack'];
-const EVENT_LABELS: Record<EventType, string> = { nappy: 'Nappy', meal: 'Meal', sleep: 'Sleep' };
-const EVENT_EMOJIS: Record<EventType, string> = { nappy: '🧷', meal: '🍼', sleep: '😴' };
+const EVENT_LABELS: Record<EventType, string> = {
+  nappy: 'Nappy', meal: 'Meal', sleep: 'Sleep',
+  pump: 'Pump', temperature: 'Temperature', medication: 'Medication',
+};
+const EVENT_EMOJIS: Record<EventType, string> = {
+  nappy: '🧷', meal: '🍼', sleep: '😴',
+  pump: '🤱', temperature: '🌡️', medication: '💊',
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

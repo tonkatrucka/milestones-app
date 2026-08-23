@@ -1,6 +1,8 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type EventType = 'nappy' | 'meal' | 'sleep';
+export type CoreEventType = 'nappy' | 'meal' | 'sleep';
+export type ExtendedEventType = 'pump' | 'temperature' | 'medication';
+export type EventType = CoreEventType | ExtendedEventType;
 export type MilestoneCategory = 'language' | 'movement' | 'development';
 export type MemberRole = 'owner' | 'caregiver' | 'viewer';
 
@@ -38,7 +40,32 @@ export interface SleepMetadata {
   sleepEnd?: string;
 }
 
-export type EventMetadata = NappyMetadata | MealMetadata | SleepMetadata | Record<string, never>;
+export interface PumpMetadata {
+  amountMl?: number;
+  durationMins?: number;
+  breastSide?: BreastSide;
+}
+
+export interface TemperatureMetadata {
+  tempC: number;
+  method?: 'axillary' | 'rectal' | 'ear' | 'forehead';
+}
+
+export interface MedicationMetadata {
+  name: string;
+  doseAmountMl?: number;
+  doseIntervalHours?: number;
+  notes?: string;
+}
+
+export type EventMetadata =
+  | NappyMetadata
+  | MealMetadata
+  | SleepMetadata
+  | PumpMetadata
+  | TemperatureMetadata
+  | MedicationMetadata
+  | Record<string, never>;
 
 export interface DailyEvent {
   id: string;
@@ -148,6 +175,71 @@ export interface Invite {
   created_at: string;
 }
 
+export interface GrowthEntry {
+  id: string;
+  child_id: string;
+  measured_at: string;
+  weight_kg: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ParentCheckin {
+  id: string;
+  user_id: string;
+  child_id: string;
+  checked_in_at: string;
+  mood_score: number;
+  energy_score: number;
+  sleep_score: number;
+  note: string | null;
+  created_at: string;
+}
+
+export interface SleepPrediction {
+  child_id: string;
+  generated_date: string;
+  wake_window_mins: number | null;
+  next_nap_start: string | null;
+  next_nap_end: string | null;
+  confidence: number | null;
+  avg_nap_mins: number | null;
+  data_days: number | null;
+  updated_at: string;
+}
+
+export type FoodReaction = 'none' | 'mild' | 'moderate' | 'severe';
+
+export interface SolidFood {
+  id: string;
+  child_id: string;
+  food_name: string;
+  introduced_at: string;
+  is_top_allergen: boolean;
+  reaction: FoodReaction | null;
+  reaction_notes: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface VaccinationRecord {
+  id: string;
+  child_id: string;
+  vaccine_code: string;
+  vaccine_name: string;
+  administered_at: string;
+  dose_number: number;
+  clinic: string | null;
+  batch_number: string | null;
+  reaction_notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface NotificationPreferences {
   user_id: string;
   notify_activities: boolean;
@@ -231,6 +323,31 @@ export interface Database {
         Row: ChildResearchShown;
         Insert: ChildResearchShown;
         Update: Partial<ChildResearchShown>;
+      };
+      growth_entries: {
+        Row: GrowthEntry;
+        Insert: Omit<GrowthEntry, 'id' | 'created_at'>;
+        Update: Partial<Omit<GrowthEntry, 'id' | 'child_id' | 'created_at'>>;
+      };
+      parent_checkins: {
+        Row: ParentCheckin;
+        Insert: Omit<ParentCheckin, 'id' | 'created_at'>;
+        Update: Partial<Omit<ParentCheckin, 'id' | 'user_id' | 'child_id' | 'created_at'>>;
+      };
+      child_sleep_predictions: {
+        Row: SleepPrediction;
+        Insert: Omit<SleepPrediction, 'updated_at'>;
+        Update: Partial<Omit<SleepPrediction, 'child_id'>>;
+      };
+      solid_foods: {
+        Row: SolidFood;
+        Insert: Omit<SolidFood, 'id' | 'created_at'>;
+        Update: Partial<Omit<SolidFood, 'id' | 'child_id' | 'created_at'>>;
+      };
+      vaccinations: {
+        Row: VaccinationRecord;
+        Insert: Omit<VaccinationRecord, 'id' | 'created_at'>;
+        Update: Partial<Omit<VaccinationRecord, 'id' | 'child_id' | 'created_at'>>;
       };
     };
     Functions: {

@@ -38,7 +38,7 @@ function emptyDay(dateKey: string, date: Date): EventDay {
     dateKey,
     label: format(date, 'EEE d MMM'),
     events: [],
-    counts: { nappy: 0, meal: 0, sleep: 0 },
+    counts: { nappy: 0, meal: 0, sleep: 0, pump: 0, temperature: 0, medication: 0 },
     totalMl: 0,
     totalSleepMins: 0,
     wakeUps: [],

@@ -78,6 +78,9 @@ export const EventColors = {
   nappy: PaletteCool.slateBlue,
   meal: PaletteAnchors.mutedApricot,
   sleep: PaletteCool.lavenderGrey,
+  pump: PaletteCool.seaGlass,
+  temperature: PalettePeach.dustyRose,
+  medication: PaletteAnchors.sageGreen,
 } as const;
 
 export const MilestoneColors = {

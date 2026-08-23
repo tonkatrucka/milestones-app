@@ -751,6 +751,26 @@ export default function SettingsScreen() {
 
         <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
 
+        <Section title="Child health" colors={colors}>
+          <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
+            Track growth, vaccinations, and solid food introduction.
+          </Text>
+          {[
+            { label: 'Growth tracker', emoji: '📏', path: '/growth/index' },
+            { label: 'Foods introduced', emoji: '🥕', path: '/foods/index' },
+            { label: 'Vaccinations', emoji: '💉', path: '/vaccinations/index' },
+          ].map(({ label, emoji, path }) => (
+            <Pressable
+              key={path}
+              style={[styles.navRow, { borderColor: colors.border }]}
+              onPress={() => router.push(path as never)}>
+              <Text style={styles.navEmoji}>{emoji}</Text>
+              <Text style={[styles.navLabel, { color: colors.text }]}>{label}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+          ))}
+        </Section>
+
         <Section title="Account" colors={colors}>
           <View style={styles.infoRow}>
             <Text style={[styles.label, { color: colors.muted }]}>Signed in as</Text>
@@ -1168,6 +1188,12 @@ const styles = StyleSheet.create({
   childName: { fontSize: 15, fontWeight: '600' },
   childDob: { fontSize: 12 },
   activeLabel: { fontSize: 12, fontWeight: '700' },
+  navRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  navEmoji: { fontSize: 20, width: 28 },
+  navLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
   input: {
     borderRadius: Radius.md,
     borderWidth: 1,

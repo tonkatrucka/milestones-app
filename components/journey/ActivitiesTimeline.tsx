@@ -37,6 +37,9 @@ const EVENT_EMOJIS: Record<EventType, string> = {
   nappy: '🧷',
   meal: '🍼',
   sleep: '😴',
+  pump: '🤱',
+  temperature: '🌡️',
+  medication: '💊',
 };
 
 export interface ActivitiesTimelineProps {

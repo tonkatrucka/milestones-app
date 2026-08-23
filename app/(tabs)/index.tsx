@@ -26,14 +26,21 @@ import { TodayFeed } from '@/components/home/TodayFeed';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EditEventModal } from '@/components/events/EditEventModal';
 import { AssistantFab, AssistantQuickSheet } from '@/components/home/AssistantQuickSheet';
-import { logEvent, updateEvent } from '@/services/events';
+import { VoiceLogSheet } from '@/components/home/VoiceLogSheet';
+import { NapPredictionCard } from '@/components/home/NapPredictionCard';
+import { WellbeingPrompt } from '@/components/home/WellbeingPrompt';
+import { HandoffSummarySheet } from '@/components/home/HandoffSummarySheet';
+import { logEvent, updateEvent, getRecentEvents } from '@/services/events';
 import {
   startSleepTimer,
   stopSleepTimer,
   syncSleepTimerWithOpenEvent,
 } from '@/services/sleep-timer';
+import { ensureLocalChannel } from '@/services/local-notifications';
+import { getTodayCheckin } from '@/services/wellbeing';
 import type { DailyEvent, EventType, SleepMetadata } from '@/lib/database.types';
 import { useLogConfirmationStore } from '@/store/log-confirmation-store';
+import { useSleepPrediction } from '@/hooks/use-sleep-prediction';
 import { differenceInMonths, differenceInYears } from 'date-fns';
 
 function formatAge(dob: string): string {
@@ -78,7 +85,13 @@ export default function HomeScreen() {
   const [showChildPicker, setShowChildPicker] = useState(false);
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
   const [showAssistant, setShowAssistant] = useState(false);
+  const [showVoiceLog, setShowVoiceLog] = useState(false);
+  const [showHandoff, setShowHandoff] = useState(false);
   const [highlightEventId, setHighlightEventId] = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<DailyEvent[]>([]);
+  const [showWellbeing, setShowWellbeing] = useState(false);
+  const [wellbeingDismissed, setWellbeingDismissed] = useState(false);
+  const prediction = useSleepPrediction(recentEvents);
 
   const openAssistant = useCallback(() => {
     if (Platform.OS === 'android') {
@@ -87,6 +100,25 @@ export default function HomeScreen() {
     }
     setShowAssistant(true);
   }, [router]);
+
+  // Fetch recent events for sleep predictions + handoff
+  useEffect(() => {
+    if (!activeChildId) return;
+    getRecentEvents(activeChildId, 14)
+      .then(setRecentEvents)
+      .catch(() => null);
+  }, [activeChildId, todayEvents]);
+
+  // Check if parent should see the wellbeing prompt today
+  useEffect(() => {
+    if (!session?.user.id || !activeChildId || wellbeingDismissed) return;
+    getTodayCheckin(session.user.id, activeChildId)
+      .then((checkin) => { if (!checkin) setShowWellbeing(true); })
+      .catch(() => null);
+  }, [session?.user.id, activeChildId, wellbeingDismissed]);
+
+  // Ensure local notification channel exists (Android)
+  useEffect(() => { void ensureLocalChannel(); }, []);
 
   const feedRef = useRef<View>(null);
   const pending = useLogConfirmationStore((s) => s.pending);
@@ -219,7 +251,7 @@ export default function HomeScreen() {
                 style={[styles.childName, { color: colors.text, fontFamily: Fonts!.rounded }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit>
-                {activeChild.name}'s Recent Activity
+                {activeChild.name}&apos;s Recent Activity
               </Text>
               <Text style={[styles.childAge, { color: colors.muted }]}>
                 {formatAge(activeChild.date_of_birth)}
@@ -276,6 +308,44 @@ export default function HomeScreen() {
           ))}
         </View>
 
+        {/* Secondary quick actions */}
+        {canWrite && (
+          <View style={styles.secondaryRow}>
+            {(['pump', 'temperature', 'medication'] as EventType[]).map((type) => (
+              <Pressable
+                key={type}
+                style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+                onPress={() => router.push(`/log/${type}` as never)}>
+                <Text style={styles.secondaryChipEmoji}>
+                  {type === 'pump' ? '🤱' : type === 'temperature' ? '🌡️' : '💊'}
+                </Text>
+                <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+              onPress={() => setShowHandoff(true)}>
+              <Text style={styles.secondaryChipEmoji}>🤝</Text>
+              <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>Handoff</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Nap prediction */}
+        <NapPredictionCard prediction={prediction} />
+
+        {/* Parent wellbeing */}
+        {showWellbeing && !wellbeingDismissed && session?.user.id && activeChildId && (
+          <WellbeingPrompt
+            userId={session.user.id}
+            childId={activeChildId}
+            onCheckedIn={() => setShowWellbeing(false)}
+            onDismiss={() => { setShowWellbeing(false); setWellbeingDismissed(true); }}
+          />
+        )}
+
         <View ref={feedRef} onLayout={measureTimelineTop} collapsable={false}>
           <TodayFeed
             events={todayEvents}
@@ -296,8 +366,16 @@ export default function HomeScreen() {
       />
     </SafeAreaView>
 
-      {!showAssistant && (
-        <AssistantFab onPress={openAssistant} />
+      {!showAssistant && !showVoiceLog && (
+        <View style={styles.fabRow}>
+          <Pressable
+            style={[styles.voiceFab, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+            onPress={() => setShowVoiceLog(true)}
+            accessibilityLabel="Quick voice log">
+            <Text style={styles.voiceFabEmoji}>🎙️</Text>
+          </Pressable>
+          <AssistantFab onPress={openAssistant} />
+        </View>
       )}
 
       {Platform.OS !== 'android' && (
@@ -311,6 +389,22 @@ export default function HomeScreen() {
           onActivityLogged={handleActivityLogged}
         />
       )}
+
+      <VoiceLogSheet
+        visible={showVoiceLog}
+        onClose={() => setShowVoiceLog(false)}
+        childId={activeChildId}
+        childName={activeChild.name}
+        childDob={activeChild.date_of_birth}
+        onActivityLogged={handleActivityLogged}
+      />
+
+      <HandoffSummarySheet
+        visible={showHandoff}
+        onClose={() => setShowHandoff(false)}
+        events={[...todayEvents, ...yesterdayEvents]}
+        childName={activeChild.name}
+      />
 
       <LogConfirmationOverlay />
     </View>
@@ -369,6 +463,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  secondaryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  secondaryChipEmoji: { fontSize: 14 },
+  secondaryChipLabel: { fontSize: 13, fontWeight: '600' },
+  fabRow: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    left: 0,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+    paddingRight: Spacing.md,
+    paddingBottom: Spacing.lg,
+    pointerEvents: 'box-none',
+  },
+  voiceFab: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  voiceFabEmoji: { fontSize: 22 },
   addChildButton: {
     margin: Spacing.lg,
     borderRadius: 12,

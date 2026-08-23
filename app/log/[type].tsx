@@ -21,12 +21,32 @@ import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { getLastEventByType, logEvent, updateEvent } from '@/services/events';
 import { startSleepTimer, stopSleepTimer } from '@/services/sleep-timer';
-import type { DailyEvent, EventType, NappyMetadata, MealMetadata, SleepMetadata } from '@/lib/database.types';
+import { scheduleMedicationReminder } from '@/services/local-notifications';
+import type {
+  BreastSide,
+  DailyEvent,
+  EventType,
+  MealMetadata,
+  MedicationMetadata,
+  NappyMetadata,
+  PumpMetadata,
+  SleepMetadata,
+  TemperatureMetadata,
+} from '@/lib/database.types';
 import { useLogConfirmationStore } from '@/store/log-confirmation-store';
 import { BreastFeedControls, type BreastFeedValues } from '@/components/meals/BreastFeedControls';
 
 const NAPPY_TYPES: NappyMetadata['nappyType'][] = ['wet', 'dirty', 'both', 'dry'];
 const MEAL_TYPES: MealMetadata['mealType'][] = ['breast', 'bottle', 'solid', 'snack'];
+const PUMP_SIDES: Array<BreastSide | 'both'> = ['left', 'right', 'both'];
+const TEMP_METHODS: TemperatureMetadata['method'][] = ['axillary', 'ear', 'forehead', 'rectal'];
+const TEMP_METHOD_LABELS: Record<NonNullable<TemperatureMetadata['method']>, string> = {
+  axillary: 'Underarm',
+  ear: 'Ear',
+  forehead: 'Forehead',
+  rectal: 'Rectal',
+};
+const COMMON_DOSE_INTERVALS = [4, 6, 8, 12] as const;
 
 // ─── Time picker helper (iOS inline / Android modal button) ─────────────────
 
@@ -115,6 +135,20 @@ export default function LogEventScreen() {
     durationMins: 10,
     amountMl: 120,
   });
+
+  // Pump
+  const [pumpSide, setPumpSide] = useState<BreastSide>('left');
+  const [pumpAmountMl, setPumpAmountMl] = useState('');
+  const [pumpDurationMins, setPumpDurationMins] = useState('');
+
+  // Temperature
+  const [tempC, setTempC] = useState('');
+  const [tempMethod, setTempMethod] = useState<NonNullable<TemperatureMetadata['method']>>('axillary');
+
+  // Medication
+  const [medName, setMedName] = useState('');
+  const [medDoseMl, setMedDoseMl] = useState('');
+  const [medIntervalHours, setMedIntervalHours] = useState<number>(4);
 
   // ── Sleep-specific state ──────────────────────────────────────────────────
   type SleepMode = 'loading' | 'new' | 'wakeup';
@@ -223,6 +257,66 @@ export default function LogEventScreen() {
           });
           await startSleepTimer(activeChildId, saved.id, saved.occurred_at);
         }
+      } else if (type === 'pump') {
+        const meta: PumpMetadata = {
+          breastSide: pumpSide,
+          ...(pumpAmountMl ? { amountMl: parseInt(pumpAmountMl, 10) } : {}),
+          ...(pumpDurationMins ? { durationMins: parseInt(pumpDurationMins, 10) } : {}),
+        };
+        saved = await logEvent({
+          childId: activeChildId,
+          type: 'pump',
+          occurredAt: time,
+          notes: notes.trim() || undefined,
+          metadata: meta,
+          userId: session.user.id,
+        });
+      } else if (type === 'temperature') {
+        const tempNum = parseFloat(tempC);
+        if (!tempC || isNaN(tempNum)) {
+          Alert.alert('Temperature required', 'Please enter a temperature reading.');
+          setIsLoading(false);
+          return;
+        }
+        if (tempNum < 30 || tempNum > 44) {
+          Alert.alert('Invalid temperature', 'Temperature must be between 30°C and 44°C.');
+          setIsLoading(false);
+          return;
+        }
+        const meta: TemperatureMetadata = { tempC: tempNum, method: tempMethod };
+        saved = await logEvent({
+          childId: activeChildId,
+          type: 'temperature',
+          occurredAt: time,
+          notes: notes.trim() || undefined,
+          metadata: meta,
+          userId: session.user.id,
+        });
+      } else if (type === 'medication') {
+        if (!medName.trim()) {
+          Alert.alert('Medication name required', 'Please enter the medication name.');
+          setIsLoading(false);
+          return;
+        }
+        const meta: MedicationMetadata = {
+          name: medName.trim(),
+          ...(medDoseMl ? { doseAmountMl: parseFloat(medDoseMl) } : {}),
+          doseIntervalHours: medIntervalHours,
+        };
+        saved = await logEvent({
+          childId: activeChildId,
+          type: 'medication',
+          occurredAt: time,
+          notes: notes.trim() || undefined,
+          metadata: meta,
+          userId: session.user.id,
+        });
+        // Schedule next-dose local reminder
+        void scheduleMedicationReminder({
+          medicationName: medName.trim(),
+          doseIntervalHours: medIntervalHours,
+          lastDoseAt: time,
+        });
       }
 
       if (saved) {
@@ -239,7 +333,13 @@ export default function LogEventScreen() {
   if (!type) return null;
 
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
-  const typeEmoji = type === 'nappy' ? '👶' : type === 'meal' ? '🍼' : '😴';
+  const typeEmoji =
+    type === 'nappy' ? '👶' :
+    type === 'meal' ? '🍼' :
+    type === 'sleep' ? '😴' :
+    type === 'pump' ? '🤱' :
+    type === 'temperature' ? '🌡️' :
+    type === 'medication' ? '💊' : '📝';
   const isSleepLoading = type === 'sleep' && sleepMode === 'loading';
 
   return (
@@ -450,6 +550,129 @@ export default function LogEventScreen() {
               </>
             )}
 
+            {/* ── Pump UI ── */}
+            {type === 'pump' && (
+              <>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Side</Text>
+                  <View style={styles.optionRow}>
+                    {PUMP_SIDES.map((s) => (
+                      <Pressable
+                        key={s}
+                        style={[styles.optionChip, { backgroundColor: pumpSide === s ? accent : colors.inputBackground }]}
+                        onPress={() => setPumpSide(s as BreastSide)}>
+                        <Text style={[styles.optionText, { color: pumpSide === s ? '#fff' : colors.text }]}>
+                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Amount expressed (ml)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. 80"
+                    placeholderTextColor={colors.muted}
+                    value={pumpAmountMl}
+                    onChangeText={setPumpAmountMl}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Duration (minutes)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. 15"
+                    placeholderTextColor={colors.muted}
+                    value={pumpDurationMins}
+                    onChangeText={setPumpDurationMins}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </>
+            )}
+
+            {/* ── Temperature UI ── */}
+            {type === 'temperature' && (
+              <>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Temperature (°C)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. 37.5"
+                    placeholderTextColor={colors.muted}
+                    value={tempC}
+                    onChangeText={setTempC}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                  />
+                  {tempC && parseFloat(tempC) >= 38 && (
+                    <Text style={[styles.feverWarning]}>⚠️ Temperature ≥38°C may indicate a fever</Text>
+                  )}
+                </View>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Method</Text>
+                  <View style={styles.optionRow}>
+                    {TEMP_METHODS.map((m) => (
+                      <Pressable
+                        key={m}
+                        style={[styles.optionChip, { backgroundColor: tempMethod === m ? accent : colors.inputBackground }]}
+                        onPress={() => setTempMethod(m!)}>
+                        <Text style={[styles.optionText, { color: tempMethod === m ? '#fff' : colors.text }]}>
+                          {TEMP_METHOD_LABELS[m!]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* ── Medication UI ── */}
+            {type === 'medication' && (
+              <>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Medication name</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. Calpol, Nurofen"
+                    placeholderTextColor={colors.muted}
+                    value={medName}
+                    onChangeText={setMedName}
+                    autoCapitalize="words"
+                    autoFocus
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Dose (ml, optional)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. 2.5"
+                    placeholderTextColor={colors.muted}
+                    value={medDoseMl}
+                    onChangeText={setMedDoseMl}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Next dose allowed after</Text>
+                  <View style={styles.optionRow}>
+                    {COMMON_DOSE_INTERVALS.map((h) => (
+                      <Pressable
+                        key={h}
+                        style={[styles.optionChip, { backgroundColor: medIntervalHours === h ? accent : colors.inputBackground }]}
+                        onPress={() => setMedIntervalHours(h)}>
+                        <Text style={[styles.optionText, { color: medIntervalHours === h ? '#fff' : colors.text }]}>
+                          {h}h
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
+
             {/* Notes */}
             <View>
               <Text style={[styles.fieldLabel, { color: colors.muted }]}>Notes (optional)</Text>
@@ -549,6 +772,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   notesInput: { minHeight: 80, textAlignVertical: 'top' },
+  feverWarning: { fontSize: 12, color: '#F44336', marginTop: 4 },
   button: {
     marginHorizontal: Spacing.lg,
     borderRadius: Radius.md,

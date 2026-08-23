@@ -1,23 +1,41 @@
 import { differenceInMinutes, format } from 'date-fns';
-import type { DailyEvent, EventType, MealMetadata, NappyMetadata, SleepMetadata } from '@/lib/database.types';
+import type {
+  DailyEvent,
+  EventType,
+  MealMetadata,
+  MedicationMetadata,
+  NappyMetadata,
+  PumpMetadata,
+  SleepMetadata,
+  TemperatureMetadata,
+} from '@/lib/database.types';
 import { formatMealDetailParts } from '@/lib/meal-format';
 
 export const EVENT_LABELS: Record<EventType, string> = {
   nappy: 'Nappy',
   meal: 'Meal',
   sleep: 'Sleep',
+  pump: 'Pump',
+  temperature: 'Temperature',
+  medication: 'Medication',
 };
 
 export const EVENT_EMOJIS: Record<EventType, string> = {
   nappy: '🧷',
   meal: '🍼',
   sleep: '😴',
+  pump: '🤱',
+  temperature: '🌡️',
+  medication: '💊',
 };
 
 export const QUICK_LOG_EMOJIS: Record<EventType, string> = {
   nappy: '👶',
   meal: '🍼',
   sleep: '😴',
+  pump: '🤱',
+  temperature: '🌡️',
+  medication: '💊',
 };
 
 export function getEventDetail(event: DailyEvent): string {
@@ -39,6 +57,26 @@ export function getEventDetail(event: DailyEvent): string {
         return `${mins}m`;
       }
       return 'Ongoing';
+    }
+    case 'pump': {
+      const m = meta as Partial<PumpMetadata>;
+      const parts: string[] = [];
+      if (m.breastSide) parts.push(m.breastSide.charAt(0).toUpperCase() + m.breastSide.slice(1));
+      if (m.amountMl != null) parts.push(`${m.amountMl}ml`);
+      if (m.durationMins != null) parts.push(`${m.durationMins}m`);
+      return parts.join(' · ') || 'Pumping session';
+    }
+    case 'temperature': {
+      const m = meta as Partial<TemperatureMetadata>;
+      if (m.tempC != null) return `${m.tempC.toFixed(1)}°C`;
+      return '';
+    }
+    case 'medication': {
+      const m = meta as Partial<MedicationMetadata>;
+      if (!m.name) return 'Medication';
+      const parts: string[] = [m.name];
+      if (m.doseAmountMl != null) parts.push(`${m.doseAmountMl}ml`);
+      return parts.join(' · ');
     }
     default:
       return '';
