@@ -46,6 +46,7 @@ import {
 import type { Child, Invite, MemberRole } from '@/lib/database.types';
 import { TransferOwnershipModal } from '@/components/settings/TransferOwnershipModal';
 import { NotificationSettingsSection } from '@/components/settings/NotificationSettingsSection';
+import { DigestFollowersSection } from '@/components/settings/DigestFollowersSection';
 
 function teamErrorMessage(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'message' in e) {
@@ -751,6 +752,14 @@ export default function SettingsScreen() {
 
         <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
 
+        {activeChild && isOwner && (
+          <DigestFollowersSection
+            childId={activeChild.id}
+            userId={session?.user.id ?? null}
+            colors={colors}
+          />
+        )}
+
         <Section title="Child health" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
             Track growth, vaccinations, and solid food introduction.
@@ -759,6 +768,8 @@ export default function SettingsScreen() {
             { label: 'Growth tracker', emoji: '📏', path: '/growth/index' },
             { label: 'Foods introduced', emoji: '🥕', path: '/foods/index' },
             { label: 'Vaccinations', emoji: '💉', path: '/vaccinations/index' },
+            { label: 'First words dictionary', emoji: '💬', path: '/words/index' },
+            { label: 'Time capsule', emoji: '⏳', path: '/capsule/index' },
           ].map(({ label, emoji, path }) => (
             <Pressable
               key={path}

@@ -86,6 +86,8 @@ export interface Milestone {
   description: string | null;
   achieved_at: string;
   media_urls: string[];
+  audio_url: string | null;
+  is_private: boolean;
   created_by: string | null;
   created_at: string;
 }
@@ -98,6 +100,8 @@ export interface Memory {
   occurred_at: string;
   media_urls: string[];
   tags: string[];
+  audio_url: string | null;
+  is_private: boolean;
   created_by: string | null;
   created_at: string;
 }
@@ -173,6 +177,105 @@ export interface Invite {
   accepted_at: string | null;
   created_by: string;
   created_at: string;
+}
+
+export interface MilestoneReaction {
+  id: string;
+  milestone_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface MemoryReaction {
+  id: string;
+  memory_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface MilestoneComment {
+  id: string;
+  milestone_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface MemoryComment {
+  id: string;
+  memory_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface MonthlyRecap {
+  child_id: string;
+  month_key: string;
+  narrative: string;
+  generated_at: string;
+}
+
+export interface DigestFollower {
+  id: string;
+  child_id: string;
+  email: string;
+  display_name: string | null;
+  added_by: string;
+  is_active: boolean;
+  frequency: 'weekly' | 'monthly';
+  content_filter: 'all' | 'milestones_only' | 'no_photos';
+  created_at: string;
+}
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  child_id: string;
+  content_id: string;
+  content_type: 'milestone' | 'memory';
+  created_by: string;
+  expires_at: string;
+  view_count: number;
+  max_views: number;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface FirstWord {
+  id: string;
+  child_id: string;
+  word: string;
+  phonetic: string | null;
+  said_at: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface TimeCapsule {
+  id: string;
+  child_id: string;
+  title: string;
+  body: string;
+  media_urls: string[];
+  audio_url: string | null;
+  unlock_at: string;
+  unlocked_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export type DevChecklistStatus = 'yes' | 'not_yet' | 'not_sure';
+
+export interface DevChecklistEntry {
+  child_id: string;
+  checkpoint_id: string;
+  status: DevChecklistStatus;
+  noted_at: string;
+  notes: string | null;
 }
 
 export interface GrowthEntry {

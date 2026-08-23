@@ -31,6 +31,8 @@ export async function createMilestone(params: {
   description?: string;
   achievedAt: string;
   mediaUrls?: string[];
+  audioUrl?: string;
+  isPrivate?: boolean;
   userId: string;
 }): Promise<Milestone> {
   const { data, error } = await supabase
@@ -42,6 +44,8 @@ export async function createMilestone(params: {
       description: params.description ?? null,
       achieved_at: params.achievedAt,
       media_urls: params.mediaUrls ?? [],
+      audio_url: params.audioUrl ?? null,
+      is_private: params.isPrivate ?? false,
       created_by: params.userId,
     })
     .select()
@@ -63,16 +67,26 @@ export async function createMilestone(params: {
 export async function updateMilestone(
   id: string,
   updates: {
-    category?: MilestoneCategory;
     title?: string;
-    description?: string;
-    achieved_at?: string;
-    media_urls?: string[];
+    description?: string | null;
+    achievedAt?: string;
+    mediaUrls?: string[];
+    audioUrl?: string | null;
+    isPrivate?: boolean;
+    category?: MilestoneCategory;
   },
 ): Promise<Milestone> {
   const { data, error } = await supabase
     .from('milestones')
-    .update(updates)
+    .update({
+      ...(updates.title !== undefined && { title: updates.title }),
+      ...(updates.description !== undefined && { description: updates.description }),
+      ...(updates.achievedAt !== undefined && { achieved_at: updates.achievedAt }),
+      ...(updates.mediaUrls !== undefined && { media_urls: updates.mediaUrls }),
+      ...(updates.audioUrl !== undefined && { audio_url: updates.audioUrl }),
+      ...(updates.isPrivate !== undefined && { is_private: updates.isPrivate }),
+      ...(updates.category !== undefined && { category: updates.category }),
+    })
     .eq('id', id)
     .select()
     .single();

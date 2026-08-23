@@ -98,6 +98,15 @@ export async function uploadChatMediaBatch(
   return Promise.all(localUris.map((uri) => uploadChatMedia(childId, uri)));
 }
 
+/** Upload an audio note (m4a/mp4/aac) to the milestone-media bucket. Returns the storage path. */
+export async function uploadAudioNote(
+  childId: string,
+  localUri: string,
+): Promise<string> {
+  const path = opaqueMediaPath(childId, 'aud');
+  return uploadToBucket(MILESTONE_BUCKET, path, localUri, 'audio/m4a', childId);
+}
+
 export async function uploadChildAvatar(
   childId: string,
   localUri: string,

@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -15,16 +16,21 @@ import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
-import { Colors, Fonts, MilestoneColors, Radius, Spacing } from '@/constants/theme';
+import { Colors, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { parseCalendarDate } from '@/lib/calendar-date';
 import { useAuth } from '@/hooks/use-auth';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { deleteMilestone, getMilestone, updateMilestone } from '@/services/milestones';
-import { uploadMilestoneMedia } from '@/services/media';
+import { uploadMilestoneMedia, uploadAudioNote } from '@/services/media';
+import { getMilestoneReactions, upsertMilestoneReaction, deleteMilestoneReaction, groupReactions } from '@/services/reactions';
+import { getMilestoneComments, addMilestoneComment } from '@/services/comments';
+import { createShareLink, buildShareLinkUrl } from '@/services/share-links';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
-import type { Milestone, MilestoneCategory } from '@/lib/database.types';
+import { VoiceRecorder } from '@/components/shared/VoiceRecorder';
+import { ReactionBar } from '@/components/shared/ReactionBar';
+import type { Milestone, MilestoneCategory, MilestoneComment } from '@/lib/database.types';
 
 const CATEGORIES: MilestoneCategory[] = ['language', 'movement', 'development'];
 
@@ -69,14 +75,26 @@ export default function MilestoneDetailScreen() {
   const [date, setDate] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [activePhoto, setActivePhoto] = useState(0);
+  const [audioLocalUri, setAudioLocalUri] = useState<string | null>(null);
+  const [existingAudioUri, setExistingAudioUri] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+
+  // Reactions + comments
+  const [reactions, setReactions] = useState<ReturnType<typeof groupReactions>>([]);
+  const [comments, setComments] = useState<MilestoneComment[]>([]);
 
   const accent = MilestoneColors[category];
 
   useEffect(() => {
     if (!id) return;
-    getMilestone(id).then((m) => {
+    Promise.all([
+      getMilestone(id),
+      getMilestoneReactions(id),
+      getMilestoneComments(id),
+    ]).then(([m, rawReactions, rawComments]) => {
       if (m) {
         setMilestone(m);
         setCategory(m.category as MilestoneCategory);
@@ -84,10 +102,14 @@ export default function MilestoneDetailScreen() {
         setDescription(m.description ?? '');
         setDate(toDisplayDate(m.achieved_at));
         setPhotos(m.media_urls);
+        setExistingAudioUri(m.audio_url);
+        setIsPrivate(m.is_private);
       }
+      setReactions(groupReactions(rawReactions, session?.user.id ?? null));
+      setComments(rawComments);
       setIsLoading(false);
     });
-  }, [id]);
+  }, [id, session?.user.id]);
 
   const pickPhoto = async () => {
     if (photos.length >= 5) {
@@ -127,12 +149,19 @@ export default function MilestoneDetailScreen() {
         }
       }
 
+      let audioUrl: string | undefined | null = existingAudioUri;
+      if (audioLocalUri) {
+        audioUrl = await uploadAudioNote(activeChildId, audioLocalUri);
+      }
+
       await updateMilestone(id, {
         category,
         title: title.trim(),
-        description: description.trim() || undefined,
-        achieved_at: achievedAt,
-        media_urls: mediaUrls,
+        description: description.trim() || null,
+        achievedAt,
+        mediaUrls,
+        audioUrl,
+        isPrivate,
       });
 
       router.back();
@@ -161,6 +190,63 @@ export default function MilestoneDetailScreen() {
   const handleShare = () => {
     if (!id) return;
     router.push({ pathname: '/share/card' as any, params: { milestoneId: id } });
+  };
+
+  const handleCreateShareLink = async () => {
+    if (!id || !activeChildId || !session?.user.id) return;
+    try {
+      const link = await createShareLink({
+        childId: activeChildId,
+        contentId: id,
+        contentType: 'milestone',
+        userId: session.user.id,
+      });
+      const url = buildShareLinkUrl(link.token);
+      await Share.share({ message: url, url });
+    } catch {
+      Alert.alert('Error', 'Could not create share link.');
+    }
+  };
+
+  const handleToggleReaction = async (emoji: string) => {
+    if (!id || !session?.user.id) return;
+    const existing = reactions.find((r) => r.reactedByCurrentUser && r.emoji === emoji);
+    try {
+      if (existing) {
+        await deleteMilestoneReaction(id, session.user.id);
+      } else {
+        await upsertMilestoneReaction({ milestoneId: id, userId: session.user.id, emoji });
+      }
+      const fresh = await getMilestoneReactions(id);
+      setReactions(groupReactions(fresh, session.user.id));
+    } catch { /* ignore */ }
+  };
+
+  const handleAddComment = async (body: string) => {
+    if (!id || !session?.user.id) return;
+    const comment = await addMilestoneComment({ milestoneId: id, userId: session.user.id, body });
+    setComments((prev) => [...prev, comment]);
+  };
+
+  const generateStory = async () => {
+    if (!title.trim() || !milestone) return;
+    setIsGeneratingStory(true);
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      const res = await supabase.functions.invoke('generate-milestone-story', {
+        body: {
+          milestoneTitle: title.trim(),
+          milestoneCategory: category,
+          date: parseDateInput(date) ?? milestone.achieved_at,
+          notes: description.trim() || undefined,
+        },
+      });
+      if (res.data?.story) setDescription(res.data.story);
+    } catch {
+      Alert.alert('Error', 'Could not generate story.');
+    } finally {
+      setIsGeneratingStory(false);
+    }
   };
 
   if (isLoading) {
@@ -263,7 +349,19 @@ export default function MilestoneDetailScreen() {
             </View>
 
             <View>
-              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Description</Text>
+              <View style={styles.fieldLabelRow}>
+                <Text style={[styles.fieldLabel, { color: colors.muted }]}>Story</Text>
+                {canWrite && title.trim().length > 0 && (
+                  <Pressable
+                    style={[styles.aiButton, { borderColor: accent }]}
+                    onPress={generateStory}
+                    disabled={isGeneratingStory}>
+                    {isGeneratingStory
+                      ? <ActivityIndicator size="small" color={accent} />
+                      : <Text style={[styles.aiButtonText, { color: accent }]}>✨ Write story</Text>}
+                  </Pressable>
+                )}
+              </View>
               <TextInput
                 style={[styles.input, styles.textarea, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
                 value={description}
@@ -275,6 +373,33 @@ export default function MilestoneDetailScreen() {
                 editable={canWrite}
               />
             </View>
+
+            {/* Voice note */}
+            <View>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Voice note</Text>
+              <VoiceRecorder
+                existingAudioUri={existingAudioUri}
+                onRecordingComplete={setAudioLocalUri}
+                onRecordingDeleted={() => { setAudioLocalUri(null); setExistingAudioUri(null); }}
+              />
+            </View>
+
+            {/* Private toggle */}
+            {canWrite && (
+              <Pressable
+                style={[styles.privateToggle, { borderColor: colors.border, backgroundColor: isPrivate ? colors.primary + '15' : colors.elevated }]}
+                onPress={() => setIsPrivate((v) => !v)}>
+                <Text style={styles.privateEmoji}>{isPrivate ? '🔒' : '👁️'}</Text>
+                <View style={styles.privateInfo}>
+                  <Text style={[styles.privateTitle, { color: colors.text }]}>
+                    {isPrivate ? 'Private milestone' : 'Shared with team'}
+                  </Text>
+                  <Text style={[styles.privateSubtitle, { color: colors.muted }]}>
+                    {isPrivate ? 'Only you can see this' : 'Visible to caregivers and viewers'}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
 
             <View>
               <Text style={[styles.fieldLabel, { color: colors.muted }]}>Photos (up to 5)</Text>
@@ -305,7 +430,28 @@ export default function MilestoneDetailScreen() {
                 <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
               )}
             </View>
+          {/* Reactions + comments */}
+          <View style={[styles.reactionsSection, { borderTopColor: colors.border }]}>
+            <Text style={[styles.fieldLabel, { color: colors.muted }]}>Reactions</Text>
+            <ReactionBar
+              reactions={reactions}
+              commentCount={comments.length}
+              currentUserId={session?.user.id ?? null}
+              canReact={!!session?.user.id}
+              onToggleReaction={handleToggleReaction}
+              onAddComment={handleAddComment}
+            />
+            {/* Comments thread */}
+            {comments.map((c) => (
+              <View key={c.id} style={[styles.commentRow, { backgroundColor: colors.elevated }]}>
+                <Text style={[styles.commentBody, { color: colors.text }]}>{c.body}</Text>
+                <Text style={[styles.commentMeta, { color: colors.muted }]}>
+                  {format(new Date(c.created_at), 'MMM d, h:mm a')}
+                </Text>
+              </View>
+            ))}
           </View>
+        </View>
         </KeyboardAvoidingView>
       </ScrollView>
 
@@ -319,13 +465,18 @@ export default function MilestoneDetailScreen() {
               {isSaving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.actionButtonText}>Save changes</Text>
+                <Text style={styles.actionButtonText}>Save</Text>
               )}
             </Pressable>
             <Pressable
               style={[styles.actionButtonSecondary, { borderColor: accent }]}
               onPress={handleShare}>
-              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
+              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
             </Pressable>
             <Pressable
               style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
@@ -334,11 +485,18 @@ export default function MilestoneDetailScreen() {
             </Pressable>
           </>
         ) : (
-          <Pressable
-            style={[styles.actionButtonSecondary, { borderColor: accent }]}
-            onPress={handleShare}>
-            <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share</Text>
-          </Pressable>
+          <>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: accent }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </View>
@@ -376,6 +534,43 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: Spacing.xs,
   },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
+  aiButton: {
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  aiButtonText: { fontSize: 12, fontWeight: '700' },
+  privateToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+  },
+  privateEmoji: { fontSize: 22 },
+  privateInfo: { flex: 1 },
+  privateTitle: { fontSize: 14, fontWeight: '600' },
+  privateSubtitle: { fontSize: 12, marginTop: 2 },
+  reactionsSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  commentRow: {
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    gap: 4,
+  },
+  commentBody: { fontSize: 14, lineHeight: 20 },
+  commentMeta: { fontSize: 11 },
   categoryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

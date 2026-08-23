@@ -2,17 +2,6 @@ import { supabase } from '@/lib/supabase';
 import { notifyTeamOfNewRecord } from '@/services/notify-team';
 import type { Memory } from '@/lib/database.types';
 
-export async function getMemory(id: string): Promise<Memory | null> {
-  const { data, error } = await supabase
-    .from('memories')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
 export async function getMemories(childId: string): Promise<Memory[]> {
   const { data, error } = await supabase
     .from('memories')
@@ -24,13 +13,26 @@ export async function getMemories(childId: string): Promise<Memory[]> {
   return data ?? [];
 }
 
+export async function getMemory(id: string): Promise<Memory | null> {
+  const { data, error } = await supabase
+    .from('memories')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function createMemory(params: {
   childId: string;
   title: string;
   description?: string;
   occurredAt: string;
-  tags?: string[];
   mediaUrls?: string[];
+  tags?: string[];
+  audioUrl?: string;
+  isPrivate?: boolean;
   userId?: string;
 }): Promise<Memory> {
   const { data, error } = await supabase
@@ -40,8 +42,10 @@ export async function createMemory(params: {
       title: params.title,
       description: params.description ?? null,
       occurred_at: params.occurredAt,
-      tags: params.tags ?? [],
       media_urls: params.mediaUrls ?? [],
+      tags: params.tags ?? [],
+      audio_url: params.audioUrl ?? null,
+      is_private: params.isPrivate ?? false,
       created_by: params.userId ?? null,
     })
     .select()
@@ -66,15 +70,25 @@ export async function updateMemory(
   id: string,
   updates: {
     title?: string;
-    description?: string;
-    occurred_at?: string;
+    description?: string | null;
+    occurredAt?: string;
+    mediaUrls?: string[];
     tags?: string[];
-    media_urls?: string[];
+    audioUrl?: string | null;
+    isPrivate?: boolean;
   },
 ): Promise<Memory> {
   const { data, error } = await supabase
     .from('memories')
-    .update(updates)
+    .update({
+      ...(updates.title !== undefined && { title: updates.title }),
+      ...(updates.description !== undefined && { description: updates.description }),
+      ...(updates.occurredAt !== undefined && { occurred_at: updates.occurredAt }),
+      ...(updates.mediaUrls !== undefined && { media_urls: updates.mediaUrls }),
+      ...(updates.tags !== undefined && { tags: updates.tags }),
+      ...(updates.audioUrl !== undefined && { audio_url: updates.audioUrl }),
+      ...(updates.isPrivate !== undefined && { is_private: updates.isPrivate }),
+    })
     .eq('id', id)
     .select()
     .single();

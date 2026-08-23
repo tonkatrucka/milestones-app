@@ -31,6 +31,28 @@ Write 2–3 sentences in a warm, friendly tone — like a thoughtful friend reca
 - Keep it encouraging and human. No medical advice.
 - Return ONLY the narrative text — no JSON, no headings, no bullet points.`;
 
+const MONTHLY_RECAP_SYSTEM = `You write beautiful, keepsake-quality monthly recaps for parents about their baby's journey.
+
+Write 2–3 warm, personal sentences that feel like a love letter to the month — something the parent will want to read again in years to come.
+- Use the child's first name throughout.
+- Focus on Journey content: milestones achieved and memories captured. Not on feeding/nappy counts.
+- Be specific — mention actual milestone titles or memory moments if available.
+- The tone is warm, present, and personal — like a thoughtful family member writing in a baby book.
+- Return ONLY the narrative text — no JSON, no headings, no bullet points.`;
+
+/** ISO month key 'YYYY-MM' for a given date string */
+function monthKey(dateStr: string): string {
+  return dateStr.slice(0, 7);
+}
+
+/** Previous calendar month key */
+function previousMonthKey(today: string): string {
+  const d = new Date(today);
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
+
 function calculateAge(dob: string, today: string): string {
   const birth = new Date(dob);
   const now = new Date(today);
@@ -170,6 +192,69 @@ Deno.serve(async (req: Request) => {
           createdByUserId: null,
           summary: `${child.name}'s weekly summary is ready`,
         }).catch(() => null);
+
+        // ── Monthly recap (generated on first Sunday of a new month) ───────────
+        const prevMonth = previousMonthKey(today);
+        const { data: existingRecap } = await adminDb
+          .from('monthly_recaps')
+          .select('month_key')
+          .eq('child_id', child.id)
+          .eq('month_key', prevMonth)
+          .maybeSingle();
+
+        if (!existingRecap) {
+          // Fetch milestones and memories from the previous month
+          const prevMonthStart = `${prevMonth}-01`;
+          const prevMonthEndDate = new Date(`${prevMonth}-01`);
+          prevMonthEndDate.setMonth(prevMonthEndDate.getMonth() + 1);
+          prevMonthEndDate.setDate(0);
+          const prevMonthEnd = prevMonthEndDate.toISOString().split('T')[0];
+
+          const [{ data: monthMilestones }, { data: monthMemories }] = await Promise.all([
+            adminDb
+              .from('milestones')
+              .select('title, category, achieved_at')
+              .eq('child_id', child.id)
+              .gte('achieved_at', prevMonthStart)
+              .lte('achieved_at', prevMonthEnd),
+            adminDb
+              .from('memories')
+              .select('title, occurred_at')
+              .eq('child_id', child.id)
+              .gte('occurred_at', prevMonthStart)
+              .lte('occurred_at', prevMonthEnd),
+          ]);
+
+          if ((monthMilestones?.length ?? 0) > 0 || (monthMemories?.length ?? 0) > 0) {
+            const milestoneList = (monthMilestones ?? [])
+              .map((m: { title: string; category: string }) => `${m.category}: ${m.title}`)
+              .join('; ');
+            const memoryList = (monthMemories ?? [])
+              .map((m: { title: string }) => m.title)
+              .join('; ');
+
+            const recapPrompt = [
+              milestoneList ? `Milestones this month: ${milestoneList}.` : '',
+              memoryList ? `Memories captured: ${memoryList}.` : '',
+            ].filter(Boolean).join(' ');
+
+            try {
+              const recapResponse = await anthropic.messages.create({
+                model: 'claude-haiku-4-5',
+                max_tokens: 200,
+                system: MONTHLY_RECAP_SYSTEM,
+                messages: [{ role: 'user', content: `Child: ${child.name} (${age})\n${recapPrompt}` }],
+              });
+              const recapBlock = recapResponse.content.find((b) => b.type === 'text');
+              if (recapBlock && recapBlock.type === 'text') {
+                await adminDb.from('monthly_recaps').upsert(
+                  { child_id: child.id, month_key: prevMonth, narrative: recapBlock.text.trim() },
+                  { onConflict: 'child_id,month_key', ignoreDuplicates: false },
+                );
+              }
+            } catch { /* monthly recap failure is non-blocking */ }
+          }
+        }
 
         processed++;
       } catch (childErr) {
