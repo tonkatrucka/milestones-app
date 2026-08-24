@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -27,6 +25,7 @@ import { uploadMemoryMedia, uploadAudioNote } from '@/services/media';
 import { getMemoryReactions, upsertMemoryReaction, deleteMemoryReaction, groupReactions } from '@/services/reactions';
 import { getMemoryComments, addMemoryComment } from '@/services/comments';
 import { createShareLink, buildShareLinkUrl } from '@/services/share-links';
+import { KeyboardSafeScreen } from '@/components/shared/KeyboardSafeScreen';
 import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 import { ReactionBar } from '@/components/shared/ReactionBar';
 import type { Memory, MemoryComment } from '@/lib/database.types';
@@ -246,8 +245,53 @@ export default function MemoryDetailScreen() {
   }
 
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <KeyboardSafeScreen
+      backgroundColor={colors.background}
+      footerStyle={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}
+      footer={
+        canWrite ? (
+          <>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.actionButtonText}>Save</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
+              onPress={handleDelete}>
+              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Share card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
+            </Pressable>
+          </>
+        )
+      }>
         {photos.length > 0 ? (
           <View>
             <ResolvedImage
@@ -278,8 +322,7 @@ export default function MemoryDetailScreen() {
           </View>
         )}
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.form}>
+        <View style={styles.form}>
             <View style={[styles.chip, { backgroundColor: MemoryColor + '22' }]}>
               <Text style={[styles.chipText, { color: MemoryColor }]}>📸 Memory</Text>
             </View>
@@ -409,54 +452,7 @@ export default function MemoryDetailScreen() {
               ))}
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </ScrollView>
-
-      <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        {canWrite ? (
-          <>
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
-              onPress={handleSave}
-              disabled={isSaving}>
-              {isSaving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.actionButtonText}>Save</Text>
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
-              onPress={handleShare}>
-              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Card</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
-              onPress={handleCreateShareLink}>
-              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
-              onPress={handleDelete}>
-              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
-              onPress={handleShare}>
-              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Share card</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
-              onPress={handleCreateShareLink}>
-              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
-            </Pressable>
-          </>
-        )}
-      </View>
-    </View>
+    </KeyboardSafeScreen>
   );
 }
 
@@ -557,8 +553,8 @@ const styles = StyleSheet.create({
   commentMeta: { fontSize: 11 },
   actionBar: {
     flexDirection: 'row',
-    padding: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
     gap: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },

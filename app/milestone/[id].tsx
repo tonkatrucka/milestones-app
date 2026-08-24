@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -16,10 +14,9 @@ import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
-import { formatShortDate, formatFullDate, formatMediumDate } from '@/lib/calendar-date';
+import { formatShortDate, parseCalendarDate } from '@/lib/calendar-date';
 import { Colors, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { parseCalendarDate } from '@/lib/calendar-date';
 import { useAuth } from '@/hooks/use-auth';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
@@ -29,6 +26,7 @@ import { getMilestoneReactions, upsertMilestoneReaction, deleteMilestoneReaction
 import { getMilestoneComments, addMilestoneComment } from '@/services/comments';
 import { createShareLink, buildShareLinkUrl } from '@/services/share-links';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
+import { KeyboardSafeScreen } from '@/components/shared/KeyboardSafeScreen';
 import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 import { ReactionBar } from '@/components/shared/ReactionBar';
 import type { Milestone, MilestoneCategory, MilestoneComment } from '@/lib/database.types';
@@ -267,8 +265,53 @@ export default function MilestoneDetailScreen() {
   }
 
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <KeyboardSafeScreen
+      backgroundColor={colors.background}
+      footerStyle={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}
+      footer={
+        canWrite ? (
+          <>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: accent }, isSaving && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.actionButtonText}>Save</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: accent }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
+              onPress={handleDelete}>
+              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: accent }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
+            </Pressable>
+          </>
+        )
+      }>
         {photos.length > 0 ? (
           <View>
             <ResolvedImage
@@ -299,8 +342,7 @@ export default function MilestoneDetailScreen() {
           </View>
         )}
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.form}>
+        <View style={styles.form}>
             <View>
               <Text style={[styles.fieldLabel, { color: colors.muted }]}>Category</Text>
               <View style={styles.categoryRow}>
@@ -453,54 +495,7 @@ export default function MilestoneDetailScreen() {
             ))}
           </View>
         </View>
-        </KeyboardAvoidingView>
-      </ScrollView>
-
-      <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        {canWrite ? (
-          <>
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: accent }, isSaving && { opacity: 0.7 }]}
-              onPress={handleSave}
-              disabled={isSaving}>
-              {isSaving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.actionButtonText}>Save</Text>
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: accent }]}
-              onPress={handleShare}>
-              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Card</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
-              onPress={handleCreateShareLink}>
-              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
-              onPress={handleDelete}>
-              <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: accent }]}
-              onPress={handleShare}>
-              <Text style={[styles.actionButtonSecondaryText, { color: accent }]}>Share card</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
-              onPress={handleCreateShareLink}>
-              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
-            </Pressable>
-          </>
-        )}
-      </View>
-    </View>
+    </KeyboardSafeScreen>
   );
 }
 
@@ -619,8 +614,8 @@ const styles = StyleSheet.create({
   photoHint: { fontSize: 12, marginTop: Spacing.xs },
   actionBar: {
     flexDirection: 'row',
-    padding: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
     gap: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },

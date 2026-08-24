@@ -2,10 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +19,7 @@ import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { createMemory } from '@/services/memories';
 import { uploadMemoryMedia, uploadAudioNote } from '@/services/media';
+import { KeyboardSafeScreen } from '@/components/shared/KeyboardSafeScreen';
 import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 
 function formatDateInput(value: string): string {
@@ -130,13 +128,9 @@ export default function NewMemoryScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+    <KeyboardSafeScreen
+      backgroundColor={colors.background}
+      contentContainerStyle={styles.container}>
         <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
           New Memory
         </Text>
@@ -247,17 +241,14 @@ export default function NewMemoryScreen() {
             <Text style={styles.saveButtonText}>Save memory</Text>
           )}
         </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardSafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   container: {
     padding: Spacing.lg,
     gap: Spacing.lg,
-    paddingBottom: 60,
   },
   heading: {
     fontSize: 26,

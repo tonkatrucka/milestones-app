@@ -2,8 +2,6 @@ import { useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +22,7 @@ import { useAppStore } from '@/store/app-store';
 import { createMilestone } from '@/services/milestones';
 import { uploadMilestoneMedia, uploadAudioNote } from '@/services/media';
 import { CATEGORY_LABELS, CATEGORY_EMOJIS, getSuggestionsForAge } from '@/constants/milestone-templates';
+import { KeyboardSafeScreen } from '@/components/shared/KeyboardSafeScreen';
 import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 import { MilestoneCelebration } from '@/components/milestones/MilestoneCelebration';
 import type { MilestoneCategory } from '@/lib/database.types';
@@ -208,13 +207,10 @@ export default function NewMilestoneScreen() {
   );
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+    <KeyboardSafeScreen
+      backgroundColor={colors.background}
+      contentContainerStyle={styles.container}>
 
         {/* Step navigation */}
         <View style={styles.stepHeader}>
@@ -445,7 +441,7 @@ export default function NewMilestoneScreen() {
             )}
           </Pressable>
         )}
-      </ScrollView>
+    </KeyboardSafeScreen>
       <MilestoneCelebration
         visible={showCelebration}
         title={title}
@@ -454,13 +450,13 @@ export default function NewMilestoneScreen() {
         onDismiss={handleCelebrationDismiss}
         onShare={handleCelebrationShare}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: 60 },
+  container: { padding: Spacing.lg, gap: Spacing.lg },
   stepHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
   stepDots: { flexDirection: 'row', gap: 6 },
   stepDot: { width: 8, height: 8, borderRadius: 4 },
