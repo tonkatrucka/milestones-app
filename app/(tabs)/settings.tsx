@@ -801,7 +801,7 @@ export default function SettingsScreen() {
             <View style={styles.navLabelBlock}>
               <Text style={[styles.navLabelStacked, { color: colors.text }]}>Doctor visit summary</Text>
               <Text style={[styles.navHint, { color: colors.muted }]}>
-                PDF of growth, vaccinations, milestones, and recent activity
+                One-page PDF: measurements, vaccines, allergens, development, and 7-day averages
               </Text>
             </View>
             {isPdfExporting ? (
