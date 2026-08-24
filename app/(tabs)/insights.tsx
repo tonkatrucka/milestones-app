@@ -145,7 +145,26 @@ export default function InsightsScreen() {
         />
 
         {ageMonths !== null && ageMonths <= 48 && (
-          <MilestoneSuggestions ageMonths={ageMonths} colors={colors} router={router} />
+          <>
+            <MilestoneSuggestions ageMonths={ageMonths} colors={colors} router={router} />
+            <Pressable
+              style={[suggestStyles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push('/checklist' as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Open developmental checklist">
+              <Text style={[suggestStyles.label, { color: colors.muted }]}>WELL-CHILD CHECKLIST</Text>
+              <View style={[suggestStyles.row, { paddingBottom: Spacing.md }]}>
+                <Text style={suggestStyles.emoji}>🌱</Text>
+                <View style={suggestStyles.info}>
+                  <Text style={[suggestStyles.title, { color: colors.text }]}>CDC signs for this age</Text>
+                  <Text style={[suggestStyles.cat, { color: colors.muted }]}>
+                    Record Yes, Not yet, or Not sure
+                  </Text>
+                </View>
+                <Text style={[suggestStyles.logText, { color: colors.primary }]}>Open</Text>
+              </View>
+            </Pressable>
+          </>
         )}
 
         <ResearchBullets bullets={data?.researchBullets ?? []} />

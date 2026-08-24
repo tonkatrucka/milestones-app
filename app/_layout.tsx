@@ -214,6 +214,7 @@ export default function RootLayout() {
         <Stack.Screen name="vaccinations" options={{ headerShown: false }} />
         <Stack.Screen name="capsule" options={{ headerShown: false }} />
         <Stack.Screen name="words" options={{ headerShown: false }} />
+        <Stack.Screen name="checklist" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style={colorScheme === 'light' ? 'dark' : 'light'} />

@@ -21,10 +21,18 @@ const CORS_HEADERS = {
 
 // ─── JWT signing ──────────────────────────────────────────────────────────────
 
-async function signJwt(payload: Record<string, unknown>, secret: string): Promise<string> {
+async function signJwt(
+  payload: Record<string, unknown>,
+  secret: string,
+  ttlSeconds = 48 * 3600,
+): Promise<string> {
   const encoder = new TextEncoder();
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = btoa(JSON.stringify({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 48 * 3600 }));
+  const body = btoa(JSON.stringify({
+    ...payload,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + ttlSeconds,
+  }));
   const sigInput = `${header}.${body}`;
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(sigInput));
@@ -208,7 +216,12 @@ Deno.serve(async (req: Request) => {
 
         if (milestones.length === 0 && memories.length === 0) continue;
 
-        const unsubscribeUrl = `${supabaseUrl}/functions/v1/digest-unsubscribe?id=${follower.id}`;
+        const unsubToken = await signJwt(
+          { purpose: 'unsubscribe', followerId: follower.id },
+          digestSecret,
+          365 * 24 * 3600,
+        );
+        const unsubscribeUrl = `${supabaseUrl}/functions/v1/digest-unsubscribe?token=${encodeURIComponent(unsubToken)}`;
 
         const html = buildEmail({
           childName: child.name,
