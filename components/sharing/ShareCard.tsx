@@ -1,14 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { format, differenceInMonths, differenceInYears } from 'date-fns';
 import { ResolvedImage } from '@/components/media/ResolvedImage';
-import { MilestoneColors, Fonts, Spacing, Radius } from '@/constants/theme';
+import { MilestoneColors, Fonts, MemoryColor, Spacing, Radius } from '@/constants/theme';
 import {
-  PaletteAnchors,
   PaletteNeutralsCool,
   PaletteNeutralsWarm,
 } from '@/constants/reference-palette';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
-import type { Milestone, Child, MilestoneCategory } from '@/lib/database.types';
+import type { Milestone, Memory, Child, MilestoneCategory } from '@/lib/database.types';
 
 function formatChildAge(dob: string, achievedAt: string): string {
   const birth = new Date(dob);
@@ -22,24 +21,37 @@ function formatChildAge(dob: string, achievedAt: string): string {
 }
 
 interface ShareCardProps {
-  milestone: Milestone;
   child: Child;
+  milestone?: Milestone | null;
+  memory?: Memory | null;
 }
 
-export function ShareCard({ milestone, child }: ShareCardProps) {
-  const accent = MilestoneColors[milestone.category as MilestoneCategory];
-  const firstPhoto = milestone.media_urls[0];
-  const ageLabel = formatChildAge(child.date_of_birth, milestone.achieved_at);
+export function ShareCard({ milestone, memory, child }: ShareCardProps) {
+  const isMemory = !!memory && !milestone;
+  const accent = isMemory
+    ? MemoryColor
+    : MilestoneColors[(milestone?.category ?? 'development') as MilestoneCategory];
+  const firstPhoto = (isMemory ? memory?.media_urls : milestone?.media_urls)?.[0];
+  const title = isMemory ? memory!.title : milestone!.title;
+  const description = isMemory ? memory?.description : milestone?.description;
+  const dateIso = isMemory ? memory!.occurred_at : milestone!.achieved_at;
+  const ageLabel = formatChildAge(child.date_of_birth, dateIso);
+  const headerEmoji = isMemory
+    ? '📸'
+    : CATEGORY_EMOJIS[(milestone?.category ?? 'development') as MilestoneCategory];
+  const headerCategory = isMemory
+    ? 'Memory'
+    : CATEGORY_LABELS[(milestone?.category ?? 'development') as MilestoneCategory];
 
   return (
     <View style={[styles.card, { borderColor: accent }]}>
       <View style={[styles.header, { backgroundColor: accent }]}>
         <Text style={styles.headerEmoji}>
-          {CATEGORY_EMOJIS[milestone.category as MilestoneCategory]}
+          {headerEmoji}
         </Text>
         <View>
           <Text style={styles.headerCategory}>
-            {CATEGORY_LABELS[milestone.category as MilestoneCategory]}
+            {headerCategory}
           </Text>
           <Text style={styles.headerApp}>Milestones</Text>
         </View>
@@ -49,15 +61,15 @@ export function ShareCard({ milestone, child }: ShareCardProps) {
       ) : null}
       <View style={styles.body}>
         <Text style={[styles.title, { fontFamily: Fonts!.rounded, color: PaletteNeutralsCool.charcoal }]}>
-          {milestone.title}
+          {title}
         </Text>
-        {milestone.description ? (
-          <Text style={styles.description}>{milestone.description}</Text>
+        {description ? (
+          <Text style={styles.description}>{description}</Text>
         ) : null}
         <View style={styles.footer}>
           <Text style={[styles.childName, { color: accent, fontFamily: Fonts!.rounded }]}>{child.name}</Text>
           <Text style={styles.ageDate}>
-            {ageLabel} · {format(new Date(milestone.achieved_at), 'dd MMM yyyy')}
+            {ageLabel} · {format(new Date(dateIso), 'dd MMM yyyy')}
           </Text>
         </View>
       </View>

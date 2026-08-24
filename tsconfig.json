@@ -16,6 +16,7 @@
   ],
   "exclude": [
     "supabase/functions/**",
-    "scripts/**"
+    "scripts/**",
+    "**/*.test.ts"
   ]
 }

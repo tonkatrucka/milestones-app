@@ -774,11 +774,11 @@ export default function SettingsScreen() {
             Growth, health tracking, first words, vaccinations, and keepsakes.
           </Text>
           {[
-            { label: 'Growth tracker', emoji: '📏', path: '/growth/index' },
-            { label: 'Foods introduced', emoji: '🥕', path: '/foods/index' },
-            { label: 'Vaccinations', emoji: '💉', path: '/vaccinations/index' },
-            { label: 'First words dictionary', emoji: '💬', path: '/words/index' },
-            { label: 'Time capsule', emoji: '⏳', path: '/capsule/index' },
+            { label: 'Growth tracker', emoji: '📏', path: '/growth' },
+            { label: 'Foods introduced', emoji: '🥕', path: '/foods' },
+            { label: 'Vaccinations', emoji: '💉', path: '/vaccinations' },
+            { label: 'First words dictionary', emoji: '💬', path: '/words' },
+            { label: 'Time capsule', emoji: '⏳', path: '/capsule' },
           ].map(({ label, emoji, path }) => (
             <Pressable
               key={path}

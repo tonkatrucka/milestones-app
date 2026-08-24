@@ -51,6 +51,14 @@
         }
       ],
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Milestones to use the microphone so you can dictate logs.",
+          "speechRecognitionPermission": "Allow Milestones to convert your speech into a log.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow Milestones to access your photos to capture milestone moments.",

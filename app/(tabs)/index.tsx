@@ -26,7 +26,7 @@ import { TodayFeed } from '@/components/home/TodayFeed';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EditEventModal } from '@/components/events/EditEventModal';
 import { AssistantFab, AssistantQuickSheet } from '@/components/home/AssistantQuickSheet';
-import { VoiceLogSheet } from '@/components/home/VoiceLogSheet';
+import { VoiceLogSheet, VoiceFab } from '@/components/home/VoiceLogSheet';
 import { NapPredictionCard } from '@/components/home/NapPredictionCard';
 import { WellbeingPrompt } from '@/components/home/WellbeingPrompt';
 import { HandoffSummarySheet } from '@/components/home/HandoffSummarySheet';
@@ -382,7 +382,10 @@ export default function HomeScreen() {
     </SafeAreaView>
 
       {!showAssistant && !showVoiceLog && (
-        <AssistantFab onPress={openAssistant} />
+        <>
+          {canWrite && <VoiceFab onPress={() => setShowVoiceLog(true)} />}
+          <AssistantFab onPress={openAssistant} />
+        </>
       )}
 
       {Platform.OS !== 'android' && (

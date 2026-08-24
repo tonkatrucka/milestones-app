@@ -159,6 +159,8 @@ export interface ChildInsights {
   categories: string[];
   selected_research_by_region: Record<string, string[]>;
   generated_at: string;
+  weekly_narrative: string | null;
+  weekly_narrative_week: string | null;
 }
 
 export interface ChildResearchShown {

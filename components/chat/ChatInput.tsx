@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MAX_CHAT_PHOTOS } from '@/services/chat';
 import { chatSendPayload } from '@/lib/chat-send-payload';
+import { useDictation } from '@/hooks/use-dictation';
 
 const QUICK_LOG_CHIPS = [
   { id: 'wet', label: 'Wet nappy', text: 'Wet nappy', icon: 'water-outline' },
@@ -49,6 +50,21 @@ export function ChatInput({
   const [text, setText] = useState('');
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const dictationPrefixRef = useRef('');
+
+  const handleDictationTranscript = useCallback((spoken: string) => {
+    const prefix = dictationPrefixRef.current;
+    setText(prefix + spoken);
+  }, []);
+
+  const { isListening, toggle: toggleDictationRaw } = useDictation(handleDictationTranscript);
+
+  const toggleDictation = useCallback(() => {
+    if (!isListening) {
+      dictationPrefixRef.current = text.trim() ? `${text.trim()} ` : '';
+    }
+    toggleDictationRaw();
+  }, [isListening, text, toggleDictationRaw]);
 
   const remainingSlots = MAX_CHAT_PHOTOS - imageUris.length;
 
@@ -101,11 +117,13 @@ export function ChatInput({
   const handleSend = useCallback(() => {
     const payload = chatSendPayload(text, imageUris);
     if (!payload) return;
+    if (isListening) toggleDictationRaw();
     onSend(payload.text, payload.imageUris);
     setText('');
     setImageUris([]);
     setSourcePickerOpen(false);
-  }, [text, imageUris, onSend]);
+    dictationPrefixRef.current = '';
+  }, [text, imageUris, onSend, isListening, toggleDictationRaw]);
 
   const canSend = (text.trim().length > 0 || imageUris.length > 0) && !disabled;
   const atPhotoLimit = imageUris.length >= MAX_CHAT_PHOTOS;
@@ -197,6 +215,23 @@ export function ChatInput({
           />
         </Pressable>
 
+        <Pressable
+          style={[
+            styles.attachBtn,
+            { backgroundColor: isListening ? colors.primary : colors.inputBackground },
+          ]}
+          onPress={toggleDictation}
+          disabled={disabled}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={isListening ? 'Stop dictation' : 'Dictate a log'}>
+          <Ionicons
+            name={isListening ? 'stop' : 'mic'}
+            size={22}
+            color={disabled ? colors.muted : isListening ? '#fff' : colors.primary}
+          />
+        </Pressable>
+
         <TextInput
           style={[
             styles.input,
@@ -206,7 +241,7 @@ export function ChatInput({
               borderColor: colors.border,
             },
           ]}
-          placeholder="Tell me what's happening…"
+          placeholder={isListening ? 'Listening…' : "Tell me what's happening…"}
           placeholderTextColor={colors.muted}
           value={text}
           onChangeText={setText}

@@ -209,12 +209,11 @@ export default function RootLayout() {
         <Stack.Screen name="memory/[id]" options={{ title: 'Edit memory' }} />
         <Stack.Screen name="share/card" options={{ presentation: 'modal', title: 'Share' }} />
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', title: 'Accept invite' }} />
-        <Stack.Screen name="growth/index" options={{ title: 'Growth' }} />
-        <Stack.Screen name="growth/add" options={{ presentation: 'modal', title: 'Add measurement' }} />
-        <Stack.Screen name="foods/index" options={{ title: 'Foods' }} />
-        <Stack.Screen name="vaccinations/index" options={{ title: 'Vaccinations' }} />
-        <Stack.Screen name="capsule/index" options={{ title: 'Time capsule' }} />
-        <Stack.Screen name="words/index" options={{ title: 'First words' }} />
+        <Stack.Screen name="growth" options={{ headerShown: false }} />
+        <Stack.Screen name="foods" options={{ headerShown: false }} />
+        <Stack.Screen name="vaccinations" options={{ headerShown: false }} />
+        <Stack.Screen name="capsule" options={{ headerShown: false }} />
+        <Stack.Screen name="words" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style={colorScheme === 'light' ? 'dark' : 'light'} />

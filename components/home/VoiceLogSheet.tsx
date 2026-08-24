@@ -1,13 +1,11 @@
 /**
- * VoiceLogSheet — a bottom sheet with a large text input for
- * quick spoken or typed logging from the home screen.
+ * VoiceLogSheet — hold-or-tap microphone to dictate a quick log.
  *
- * The user speaks via their keyboard's built-in dictation (iOS/Android)
- * or types normally. The text is sent to the existing AI assistant,
- * which parses and logs the event automatically.
+ * Uses on-device speech recognition when the native module is present.
+ * Falls back to typing / keyboard dictation otherwise.
  */
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -21,8 +19,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDictation } from '@/hooks/use-dictation';
 import type { DailyEvent } from '@/lib/database.types';
 
 interface VoiceLogSheetProps {
@@ -46,12 +46,35 @@ export function VoiceLogSheet({
   const colors = Colors[scheme];
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const dictationPrefixRef = useRef('');
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
 
+  const handleTranscript = useCallback((spoken: string) => {
+    const prefix = dictationPrefixRef.current;
+    setText(prefix + spoken);
+  }, []);
+
+  const { isListening, toggle: toggleDictationRaw, stop } = useDictation(handleTranscript);
+
+  useEffect(() => {
+    if (!visible && isListening) void stop();
+  }, [visible, isListening, stop]);
+
+  const toggleDictation = useCallback(() => {
+    if (!isListening) {
+      dictationPrefixRef.current = text.trim() ? `${text.trim()} ` : '';
+      if (process.env.EXPO_OS === 'ios') {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    }
+    toggleDictationRaw();
+  }, [isListening, text, toggleDictationRaw]);
+
   const handleSubmit = async () => {
     if (!text.trim() || !childId || isSending) return;
+    if (isListening) await stop();
     Keyboard.dismiss();
     setIsSending(true);
     setLastResult(null);
@@ -70,6 +93,7 @@ export function VoiceLogSheet({
       }
       setLastResult(result.content ?? 'Logged!');
       setText('');
+      dictationPrefixRef.current = '';
     } catch {
       setLastResult('Could not log that — please try again.');
     } finally {
@@ -78,8 +102,10 @@ export function VoiceLogSheet({
   };
 
   const handleClose = () => {
+    void stop();
     setText('');
     setLastResult(null);
+    dictationPrefixRef.current = '';
     Keyboard.dismiss();
     onClose();
   };
@@ -102,11 +128,29 @@ export function VoiceLogSheet({
           <View style={styles.handle} />
 
           <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-            Quick log
+            Voice log
           </Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>
-            Type or dictate what happened — &quot;wet nappy just now&quot;, &quot;bottle 120ml&quot;, &quot;woke up&quot;
+            Tap the mic and say what happened — &quot;wet nappy just now&quot;, &quot;bottle 120ml&quot;, &quot;woke up&quot;
           </Text>
+
+          <Pressable
+            style={[
+              styles.micButton,
+              { backgroundColor: isListening ? colors.primary : colors.inputBackground, borderColor: colors.primary },
+            ]}
+            onPress={toggleDictation}
+            accessibilityRole="button"
+            accessibilityLabel={isListening ? 'Stop listening' : 'Start dictation'}>
+            <Ionicons
+              name={isListening ? 'stop' : 'mic'}
+              size={36}
+              color={isListening ? '#fff' : colors.primary}
+            />
+            <Text style={[styles.micLabel, { color: isListening ? '#fff' : colors.primary }]}>
+              {isListening ? 'Listening… tap to stop' : 'Tap to dictate'}
+            </Text>
+          </Pressable>
 
           <View
             style={[
@@ -116,12 +160,11 @@ export function VoiceLogSheet({
             <TextInput
               ref={inputRef}
               style={[styles.input, { color: colors.text }]}
-              placeholder="e.g. wet nappy just now…"
+              placeholder="Or type here…"
               placeholderTextColor={colors.muted}
               value={text}
               onChangeText={setText}
-              onSubmitEditing={handleSubmit}
-              autoFocus
+              onSubmitEditing={() => void handleSubmit()}
               returnKeyType="send"
               multiline={false}
             />
@@ -131,7 +174,7 @@ export function VoiceLogSheet({
                 { backgroundColor: colors.primary },
                 (!text.trim() || isSending) && { opacity: 0.4 },
               ]}
-              onPress={handleSubmit}
+              onPress={() => void handleSubmit()}
               disabled={!text.trim() || isSending}
               accessibilityLabel="Submit log">
               <Ionicons name="arrow-up" size={20} color="#fff" />
@@ -146,6 +189,32 @@ export function VoiceLogSheet({
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+interface VoiceFabProps {
+  onPress: () => void;
+}
+
+export function VoiceFab({ onPress }: VoiceFabProps) {
+  const scheme = useColorScheme() ?? 'light';
+  const colors = Colors[scheme];
+
+  const handlePress = useCallback(() => {
+    if (process.env.EXPO_OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onPress();
+  }, [onPress]);
+
+  return (
+    <Pressable
+      style={[styles.fab, { backgroundColor: colors.elevated, borderColor: colors.primary }]}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel="Voice log — dictate what happened">
+      <Ionicons name="mic" size={24} color={colors.primary} />
+    </Pressable>
   );
 }
 
@@ -181,6 +250,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  micButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    paddingVertical: Spacing.lg,
+    minHeight: 112,
+  },
+  micLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -207,5 +289,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  fab: {
+    position: 'absolute',
+    right: Spacing.md + 56 + 12,
+    bottom: Spacing.md,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
   },
 });

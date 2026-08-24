@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -15,15 +16,20 @@ import { ResolvedImage } from '@/components/media/ResolvedImage';
 import { pickImage } from '@/lib/pick-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
-import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
+import { formatShortDate, parseCalendarDate } from '@/lib/calendar-date';
+import { Colors, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { parseCalendarDate } from '@/lib/calendar-date';
 import { useAuth } from '@/hooks/use-auth';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { deleteMemory, getMemory, updateMemory } from '@/services/memories';
-import { uploadMemoryMedia } from '@/services/media';
-import type { Memory } from '@/lib/database.types';
+import { uploadMemoryMedia, uploadAudioNote } from '@/services/media';
+import { getMemoryReactions, upsertMemoryReaction, deleteMemoryReaction, groupReactions } from '@/services/reactions';
+import { getMemoryComments, addMemoryComment } from '@/services/comments';
+import { createShareLink, buildShareLinkUrl } from '@/services/share-links';
+import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
+import { ReactionBar } from '@/components/shared/ReactionBar';
+import type { Memory, MemoryComment } from '@/lib/database.types';
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -73,12 +79,21 @@ export default function MemoryDetailScreen() {
   const [date, setDate] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [activePhoto, setActivePhoto] = useState(0);
+  const [audioLocalUri, setAudioLocalUri] = useState<string | null>(null);
+  const [existingAudioUri, setExistingAudioUri] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [reactions, setReactions] = useState<ReturnType<typeof groupReactions>>([]);
+  const [comments, setComments] = useState<MemoryComment[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    getMemory(id).then((m) => {
+    Promise.all([
+      getMemory(id),
+      getMemoryReactions(id),
+      getMemoryComments(id),
+    ]).then(([m, rawReactions, rawComments]) => {
       if (m) {
         setMemory(m);
         setTitle(m.title);
@@ -86,10 +101,14 @@ export default function MemoryDetailScreen() {
         setTags(m.tags.join(', '));
         setDate(toDisplayDate(m.occurred_at));
         setPhotos(m.media_urls);
+        setExistingAudioUri(m.audio_url ?? null);
+        setIsPrivate(!!m.is_private);
       }
+      setReactions(groupReactions(rawReactions, session?.user.id ?? null));
+      setComments(rawComments);
       setIsLoading(false);
     });
-  }, [id]);
+  }, [id, session?.user.id]);
 
   const pickPhoto = async () => {
     if (photos.length >= 5) {
@@ -129,12 +148,19 @@ export default function MemoryDetailScreen() {
         }
       }
 
+      let audioUrl: string | undefined | null = existingAudioUri;
+      if (audioLocalUri) {
+        audioUrl = await uploadAudioNote(activeChildId, audioLocalUri);
+      }
+
       const updated = await updateMemory(id, {
         title: title.trim(),
         description: description.trim() || undefined,
         occurredAt,
         tags: parseTags(tags),
         mediaUrls,
+        audioUrl,
+        isPrivate,
       });
 
       setMemory(updated);
@@ -160,6 +186,47 @@ export default function MemoryDetailScreen() {
         },
       },
     ]);
+  };
+
+  const handleShare = () => {
+    if (!id) return;
+    router.push({ pathname: '/share/card' as never, params: { memoryId: id } });
+  };
+
+  const handleCreateShareLink = async () => {
+    if (!id || !activeChildId || !session?.user.id) return;
+    try {
+      const link = await createShareLink({
+        childId: activeChildId,
+        contentId: id,
+        contentType: 'memory',
+        userId: session.user.id,
+      });
+      const url = buildShareLinkUrl(link.token);
+      await Share.share({ message: url, url });
+    } catch {
+      Alert.alert('Error', 'Could not create share link.');
+    }
+  };
+
+  const handleToggleReaction = async (emoji: string) => {
+    if (!id || !session?.user.id) return;
+    const existing = reactions.find((r) => r.reactedByCurrentUser && r.emoji === emoji);
+    try {
+      if (existing) {
+        await deleteMemoryReaction(id, session.user.id);
+      } else {
+        await upsertMemoryReaction({ memoryId: id, userId: session.user.id, emoji });
+      }
+      const fresh = await getMemoryReactions(id);
+      setReactions(groupReactions(fresh, session.user.id));
+    } catch { /* ignore */ }
+  };
+
+  const handleAddComment = async (body: string) => {
+    if (!id || !session?.user.id) return;
+    const comment = await addMemoryComment({ memoryId: id, userId: session.user.id, body });
+    setComments((prev) => [...prev, comment]);
   };
 
   if (isLoading) {
@@ -296,12 +363,57 @@ export default function MemoryDetailScreen() {
                 <Text style={[styles.photoHint, { color: colors.muted }]}>Long-press a photo to remove</Text>
               )}
             </View>
+
+            <View>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Voice note</Text>
+              <VoiceRecorder
+                existingAudioUri={existingAudioUri}
+                onRecordingComplete={setAudioLocalUri}
+                onRecordingDeleted={() => { setAudioLocalUri(null); setExistingAudioUri(null); }}
+              />
+            </View>
+
+            {canWrite && (
+              <Pressable
+                style={[styles.privateToggle, { borderColor: colors.border, backgroundColor: isPrivate ? colors.primary + '15' : colors.elevated }]}
+                onPress={() => setIsPrivate((v) => !v)}>
+                <Text style={styles.privateEmoji}>{isPrivate ? '🔒' : '👁️'}</Text>
+                <View style={styles.privateInfo}>
+                  <Text style={[styles.privateTitle, { color: colors.text }]}>
+                    {isPrivate ? 'Private memory' : 'Shared with team'}
+                  </Text>
+                  <Text style={[styles.privateSubtitle, { color: colors.muted }]}>
+                    {isPrivate ? 'Only you can see this' : 'Visible to caregivers and viewers'}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            <View style={[styles.reactionsSection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.fieldLabel, { color: colors.muted }]}>Reactions</Text>
+              <ReactionBar
+                reactions={reactions}
+                commentCount={comments.length}
+                currentUserId={session?.user.id ?? null}
+                canReact={!!session?.user.id}
+                onToggleReaction={handleToggleReaction}
+                onAddComment={handleAddComment}
+              />
+              {comments.map((c) => (
+                <View key={c.id} style={[styles.commentRow, { backgroundColor: colors.elevated }]}>
+                  <Text style={[styles.commentBody, { color: colors.text }]}>{c.body}</Text>
+                  <Text style={[styles.commentMeta, { color: colors.muted }]}>
+                    {formatShortDate(c.created_at)}, {format(new Date(c.created_at), 'h:mm a')}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
         </KeyboardAvoidingView>
       </ScrollView>
 
       <View style={[styles.actionBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        {canWrite && (
+        {canWrite ? (
           <>
             <Pressable
               style={[styles.actionButton, { backgroundColor: MemoryColor }, isSaving && { opacity: 0.7 }]}
@@ -310,13 +422,36 @@ export default function MemoryDetailScreen() {
               {isSaving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.actionButtonText}>Save changes</Text>
+                <Text style={styles.actionButtonText}>Save</Text>
               )}
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Link</Text>
             </Pressable>
             <Pressable
               style={[styles.actionButtonOutline, { borderColor: colors.danger }]}
               onPress={handleDelete}>
               <Text style={[styles.actionButtonOutlineText, { color: colors.danger }]}>Delete</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: MemoryColor }]}
+              onPress={handleShare}>
+              <Text style={[styles.actionButtonSecondaryText, { color: MemoryColor }]}>Share card</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionButtonSecondary, { borderColor: colors.secondary }]}
+              onPress={handleCreateShareLink}>
+              <Text style={[styles.actionButtonSecondaryText, { color: colors.secondary }]}>Share link</Text>
             </Pressable>
           </>
         )}
@@ -396,11 +531,35 @@ const styles = StyleSheet.create({
   },
   addPhotoIcon: { fontSize: 32, lineHeight: 36 },
   photoHint: { fontSize: 12, marginTop: Spacing.xs },
+  privateToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+  },
+  privateEmoji: { fontSize: 22 },
+  privateInfo: { flex: 1 },
+  privateTitle: { fontSize: 14, fontWeight: '600' },
+  privateSubtitle: { fontSize: 12, marginTop: 2 },
+  reactionsSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  commentRow: {
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    gap: 4,
+  },
+  commentBody: { fontSize: 14, lineHeight: 20 },
+  commentMeta: { fontSize: 11 },
   actionBar: {
     flexDirection: 'row',
     padding: Spacing.md,
     paddingBottom: Spacing.xl,
-    gap: Spacing.md,
+    gap: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   actionButton: {
@@ -413,13 +572,25 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 15,
+  },
+  actionButtonSecondary: {
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonSecondaryText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
   actionButtonOutline: {
     borderRadius: Radius.md,
     borderWidth: 1.5,
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

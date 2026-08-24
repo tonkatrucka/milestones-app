@@ -8,32 +8,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
 import { useInsights } from '@/hooks/use-insights';
+import { useNarratives } from '@/hooks/use-narratives';
 import { ObservationSection } from '@/components/insights/ObservationSection';
 import { InsightsScreenSkeleton } from '@/components/insights/InsightsScreenSkeleton';
 import { ResearchBullets } from '@/components/insights/ResearchBullets';
+import { NarrativeCard } from '@/components/shared/NarrativeCard';
 import { AGE_BRACKETS, CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
 import type { MilestoneCategory } from '@/lib/database.types';
-
-function WeeklyNarrative({ narrative, colors }: { narrative: string; colors: typeof Colors.light }) {
-  return (
-    <View style={[narrativeStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[narrativeStyles.label, { color: colors.muted }]}>THIS WEEK</Text>
-      <Text style={[narrativeStyles.text, { color: colors.text }]}>{narrative}</Text>
-    </View>
-  );
-}
-
-const narrativeStyles = StyleSheet.create({
-  card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.md,
-    gap: Spacing.xs,
-    marginBottom: Spacing.md,
-  },
-  label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  text: { fontSize: 14, lineHeight: 22 },
-});
 
 function MilestoneSuggestions({
   ageMonths,
@@ -98,6 +79,7 @@ export default function InsightsScreen() {
   const { session } = useAuth();
   const { activeChild, isBootstrapping } = useActiveChild(session?.user.id ?? null);
   const { data, isLoading, error, refresh } = useInsights(activeChild);
+  const narratives = useNarratives(activeChild?.id ?? null, activeChild?.name ?? null);
 
   const ageMonths = activeChild
     ? differenceInMonths(new Date(), new Date(activeChild.date_of_birth))
@@ -118,7 +100,7 @@ export default function InsightsScreen() {
     );
   }
 
-  const weeklyNarrative = (data as Record<string, unknown> | null)?.weekly_narrative as string | undefined;
+  const weeklyNarrative = narratives.weekly;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -137,13 +119,25 @@ export default function InsightsScreen() {
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.md }]}
         refreshControl={
-          <RefreshControl refreshing={isLoading && !!data} onRefresh={refresh} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={isLoading && !!data}
+            onRefresh={() => { refresh(); void narratives.refresh(); }}
+            tintColor={colors.primary}
+          />
         }>
         {error && (
           <Text style={[styles.error, { color: '#c0392b' }]}>{error}</Text>
         )}
 
-        {weeklyNarrative && <WeeklyNarrative narrative={weeklyNarrative} colors={colors} />}
+        <NarrativeCard
+          label="THIS WEEK"
+          text={weeklyNarrative}
+          emptyHint={`Log a few feeds, naps, or nappies this week and ${activeChild.name}'s story will appear here.`}
+          colors={colors}
+          onGenerate={narratives.generateWeekly}
+          isGenerating={narratives.isGeneratingWeekly}
+          generateLabel="Write this week's story"
+        />
 
         <ObservationSection
           shortInsights={data?.shortInsights ?? []}

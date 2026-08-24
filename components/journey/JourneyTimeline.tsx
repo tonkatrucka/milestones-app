@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -89,6 +89,7 @@ export interface JourneyTimelineProps {
   isLoading: boolean;
   childDob?: string | null;
   canWrite?: boolean;
+  banner?: ReactNode;
   onRefresh: () => void;
   onMilestonePress: (milestone: Milestone) => void;
   onMemoryPress: (memory: Memory) => void;
@@ -101,6 +102,7 @@ export function JourneyTimeline({
   isLoading,
   childDob,
   canWrite = true,
+  banner,
   onRefresh,
   onMilestonePress,
   onMemoryPress,
@@ -178,6 +180,7 @@ export function JourneyTimeline({
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
       }>
+      {banner}
       <View style={[styles.filterSection, { borderBottomColor: colors.border }]}>
         <View ref={filterBarRef} collapsable={false}>
           <FilterTabs filter={filter} onChange={handleFilterChange} colors={colors} />
