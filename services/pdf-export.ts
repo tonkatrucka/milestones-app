@@ -4,8 +4,12 @@
  */
 
 import { format, parseISO, differenceInMonths } from 'date-fns';
-import type { DailyEvent, GrowthEntry, Milestone, VaccinationRecord } from '@/lib/database.types';
+import type { Child, DailyEvent, GrowthEntry, Milestone, VaccinationRecord } from '@/lib/database.types';
 import { getEventDetail, EVENT_LABELS } from '@/lib/event-display';
+import { getRecentEvents } from '@/services/events';
+import { getGrowthEntries } from '@/services/growth';
+import { getMilestones } from '@/services/milestones';
+import { getVaccinations } from '@/services/vaccinations';
 
 export interface PdfExportOptions {
   childName: string;
@@ -189,4 +193,27 @@ export async function exportAndSharePdf(options: PdfExportOptions): Promise<void
       UTI: 'com.adobe.pdf',
     });
   }
+}
+
+/**
+ * Collect growth, vaccinations, milestones, and recent activity, then share
+ * a doctor-visit PDF. Used from Health & Records — not tied to one tracker.
+ */
+export async function exportDoctorVisitSummary(
+  child: Pick<Child, 'id' | 'name' | 'date_of_birth'>,
+): Promise<void> {
+  const [events, growthEntries, milestones, vaccinations] = await Promise.all([
+    getRecentEvents(child.id, 30),
+    getGrowthEntries(child.id),
+    getMilestones(child.id),
+    getVaccinations(child.id),
+  ]);
+  await exportAndSharePdf({
+    childName: child.name,
+    childDob: child.date_of_birth,
+    events,
+    growthEntries,
+    milestones,
+    vaccinations,
+  });
 }

@@ -465,6 +465,7 @@ export default function SettingsScreen() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [transferChild, setTransferChild] = useState<Child | null>(null);
   const [accountTransferOpen, setAccountTransferOpen] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
 
   const ownedChildren = children.filter((child) => childRoles[child.id] === 'owner');
   const ownedChildCount = ownedChildren.length;
@@ -645,6 +646,23 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleExportDoctorSummary = async () => {
+    if (!activeChild) {
+      Alert.alert('No child selected', 'Choose a child profile first, then export their doctor visit summary.');
+      return;
+    }
+    if (isPdfExporting) return;
+    setIsPdfExporting(true);
+    try {
+      const { exportDoctorVisitSummary } = await import('@/services/pdf-export');
+      await exportDoctorVisitSummary(activeChild);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to generate the doctor visit summary.');
+    } finally {
+      setIsPdfExporting(false);
+    }
+  };
+
   const handleSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -771,8 +789,27 @@ export default function SettingsScreen() {
 
         <Section title="Health & Records" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            Growth, health tracking, first words, vaccinations, and keepsakes.
+            Export a doctor visit summary, or open growth, foods, vaccinations, and keepsakes.
           </Text>
+          <Pressable
+            style={[styles.navRow, { borderColor: colors.border }]}
+            onPress={() => void handleExportDoctorSummary()}
+            disabled={isPdfExporting}
+            accessibilityRole="button"
+            accessibilityLabel="Export doctor visit summary">
+            <Text style={styles.navEmoji}>📄</Text>
+            <View style={styles.navLabelBlock}>
+              <Text style={[styles.navLabelStacked, { color: colors.text }]}>Doctor visit summary</Text>
+              <Text style={[styles.navHint, { color: colors.muted }]}>
+                PDF of growth, vaccinations, milestones, and recent activity
+              </Text>
+            </View>
+            {isPdfExporting ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Ionicons name="share-outline" size={18} color={colors.muted} />
+            )}
+          </Pressable>
           {[
             { label: 'Growth tracker', emoji: '📏', path: '/growth' },
             { label: 'Foods introduced', emoji: '🥕', path: '/foods' },
@@ -1213,7 +1250,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   navEmoji: { fontSize: 20, width: 28 },
+  navLabelBlock: { flex: 1, gap: 2 },
   navLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  navLabelStacked: { fontSize: 15, fontWeight: '600' },
+  navHint: { fontSize: 12, lineHeight: 16 },
   input: {
     borderRadius: Radius.md,
     borderWidth: 1,

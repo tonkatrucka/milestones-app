@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,15 +16,10 @@ import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppStore } from '@/store/app-store';
-import { useActiveChild } from '@/hooks/use-active-child';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useGrowth } from '@/hooks/use-growth';
 import { GrowthChart } from '@/components/growth/GrowthChart';
 import { deleteGrowthEntry } from '@/services/growth';
-import { exportAndSharePdf } from '@/services/pdf-export';
-import { getRecentEvents } from '@/services/events';
-import type { Milestone } from '@/lib/database.types';
-import { supabase } from '@/lib/supabase';
 
 export default function GrowthScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -32,11 +27,8 @@ export default function GrowthScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const activeChildId = useAppStore((s) => s.activeChildId);
-  const { activeChild } = useActiveChild(session?.user.id ?? null);
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
   const { entries, isLoading, refresh, removeEntry } = useGrowth(activeChildId);
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
-
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
@@ -60,29 +52,6 @@ export default function GrowthScreen() {
         },
       ],
     );
-  };
-
-  const handleExport = async () => {
-    if (!activeChild) return;
-    setIsPdfLoading(true);
-    try {
-      const [events, { data: milestones }] = await Promise.all([
-        getRecentEvents(activeChild.id, 30),
-        supabase.from('milestones').select('*').eq('child_id', activeChild.id).order('achieved_at', { ascending: false }),
-      ]);
-      await exportAndSharePdf({
-        childName: activeChild.name,
-        childDob: activeChild.date_of_birth,
-        events,
-        growthEntries: entries,
-        milestones: (milestones ?? []) as Milestone[],
-        vaccinations: [],
-      });
-    } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to generate PDF');
-    } finally {
-      setIsPdfLoading(false);
-    }
   };
 
   return (
@@ -181,17 +150,6 @@ export default function GrowthScreen() {
                     </Pressable>
                   );
                 })}
-
-                <Pressable
-                  style={[styles.exportButton, { borderColor: colors.primary }, isPdfLoading && { opacity: 0.6 }]}
-                  onPress={handleExport}
-                  disabled={isPdfLoading}>
-                  {isPdfLoading
-                    ? <ActivityIndicator color={colors.primary} />
-                    : <Text style={[styles.exportButtonText, { color: colors.primary }]}>
-                        Export doctor visit summary
-                      </Text>}
-                </Pressable>
               </>
             )}
           </>
@@ -224,11 +182,6 @@ const styles = StyleSheet.create({
   entryDateText: { fontSize: 15, fontWeight: '600' },
   entryValues: { flexDirection: 'row', gap: Spacing.sm },
   entryValue: { fontSize: 14, fontWeight: '600' },
-  exportButton: {
-    borderRadius: Radius.md, borderWidth: 1.5, paddingVertical: Spacing.md,
-    alignItems: 'center', justifyContent: 'center', minHeight: 48,
-  },
-  exportButtonText: { fontWeight: '700', fontSize: 15 },
   emptyState: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: 20, fontWeight: '800' },
