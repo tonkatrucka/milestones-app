@@ -165,6 +165,50 @@ export interface PushToken {
   updated_at: string;
 }
 
+// ─── Health Records ──────────────────────────────────────────────────────────
+
+export type HealthRecordType = 'measurement' | 'visit' | 'vaccination' | 'note';
+
+export interface MeasurementMetadata {
+  weight_kg?: number;
+  height_cm?: number;
+  head_cm?: number;
+}
+
+export interface VisitMetadata {
+  doctor?: string;
+  clinic?: string;
+  reason?: string;
+}
+
+export interface VaccinationMetadata {
+  vaccine: string;
+  batch?: string;
+  site?: string;
+}
+
+export interface NoteMetadata {
+  title: string;
+}
+
+export type HealthRecordMetadata =
+  | MeasurementMetadata
+  | VisitMetadata
+  | VaccinationMetadata
+  | NoteMetadata
+  | Record<string, never>;
+
+export interface HealthRecord {
+  id: string;
+  child_id: string;
+  type: HealthRecordType;
+  recorded_at: string;
+  notes: string | null;
+  metadata: HealthRecordMetadata;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -231,6 +275,11 @@ export interface Database {
         Row: ChildResearchShown;
         Insert: ChildResearchShown;
         Update: Partial<ChildResearchShown>;
+      };
+      health_records: {
+        Row: HealthRecord;
+        Insert: Omit<HealthRecord, 'id' | 'created_at'>;
+        Update: Partial<Omit<HealthRecord, 'id' | 'created_at'>>;
       };
     };
     Functions: {

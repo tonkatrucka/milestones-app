@@ -710,6 +710,30 @@ export default function SettingsScreen() {
           Settings
         </Text>
 
+        {activeChild && (
+          <Section title="Health & Records" colors={colors}>
+            <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
+              Track {activeChild.name}'s growth measurements, doctor visits, vaccinations, and health notes in one place.
+            </Text>
+            <Pressable
+              style={[styles.navRow, { borderColor: colors.border }]}
+              onPress={() => router.push('/health-records' as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Open health and records">
+              <View style={[styles.navRowIcon, { backgroundColor: '#6B908020' }]}>
+                <Text style={styles.navRowEmoji}>🩺</Text>
+              </View>
+              <View style={styles.navRowBody}>
+                <Text style={[styles.navRowTitle, { color: colors.text }]}>View health records</Text>
+                <Text style={[styles.navRowSubtitle, { color: colors.muted }]}>
+                  Measurements, visits, vaccinations & notes
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+          </Section>
+        )}
+
         <Section title="Appearance" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
             Choose how Milestones looks on this device.
@@ -1242,6 +1266,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginTop: Spacing.xs,
   },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.sm,
+  },
+  navRowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  navRowEmoji: { fontSize: 22 },
+  navRowBody: { flex: 1 },
+  navRowTitle: { fontSize: 15, fontWeight: '600' },
+  navRowSubtitle: { fontSize: 12, marginTop: 2 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

@@ -211,6 +211,7 @@ export default function RootLayout() {
         <Stack.Screen name="memory/[id]" options={{ title: 'Edit memory' }} />
         <Stack.Screen name="share/card" options={{ presentation: 'modal', title: 'Share' }} />
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', title: 'Accept invite' }} />
+        <Stack.Screen name="health-records" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
