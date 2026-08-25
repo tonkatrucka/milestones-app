@@ -789,7 +789,7 @@ export default function SettingsScreen() {
 
         <Section title="Health & Records" colors={colors}>
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            Export a doctor visit summary, or open growth, foods, vaccinations, the checklist, and keepsakes.
+            Export a doctor visit summary, or open visits and notes, growth, foods, vaccinations, the checklist, and keepsakes.
           </Text>
           <Pressable
             style={[styles.navRow, { borderColor: colors.border }]}
@@ -811,6 +811,7 @@ export default function SettingsScreen() {
             )}
           </Pressable>
           {[
+            { label: 'Visits & notes', emoji: '🩺', path: '/health-records' },
             { label: 'Growth tracker', emoji: '📏', path: '/growth' },
             { label: 'Foods introduced', emoji: '🥕', path: '/foods' },
             { label: 'Vaccinations', emoji: '💉', path: '/vaccinations' },

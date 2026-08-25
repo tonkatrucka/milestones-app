@@ -257,6 +257,48 @@ export interface FirstWord {
   created_at: string;
 }
 
+export type HealthRecordType = 'measurement' | 'visit' | 'vaccination' | 'note';
+
+export interface MeasurementMetadata {
+  weight_kg?: number;
+  height_cm?: number;
+  head_cm?: number;
+}
+
+export interface VisitMetadata {
+  doctor?: string;
+  clinic?: string;
+  reason?: string;
+}
+
+export interface VaccinationMetadata {
+  vaccine: string;
+  batch?: string;
+  site?: string;
+}
+
+export interface NoteMetadata {
+  title: string;
+}
+
+export type HealthRecordMetadata =
+  | MeasurementMetadata
+  | VisitMetadata
+  | VaccinationMetadata
+  | NoteMetadata
+  | Record<string, never>;
+
+export interface HealthRecord {
+  id: string;
+  child_id: string;
+  type: HealthRecordType;
+  recorded_at: string;
+  notes: string | null;
+  metadata: HealthRecordMetadata;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface TimeCapsule {
   id: string;
   child_id: string;
@@ -453,6 +495,11 @@ export interface Database {
         Row: VaccinationRecord;
         Insert: Omit<VaccinationRecord, 'id' | 'created_at'>;
         Update: Partial<Omit<VaccinationRecord, 'id' | 'child_id' | 'created_at'>>;
+      };
+      health_records: {
+        Row: HealthRecord;
+        Insert: Omit<HealthRecord, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: Partial<Omit<HealthRecord, 'id' | 'child_id' | 'created_at'>>;
       };
     };
     Functions: {
