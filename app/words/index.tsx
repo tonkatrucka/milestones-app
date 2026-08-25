@@ -9,12 +9,12 @@ import {
   FlatList,
   Modal,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { format, parseISO } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,12 +24,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAppStore } from '@/store/app-store';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { getFirstWords, addFirstWord, deleteFirstWord } from '@/services/first-words';
+import { useBottomInset } from '@/components/shared/KeyboardSafeScreen';
 import type { FirstWord } from '@/lib/database.types';
 
 export default function FirstWordsScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const router = useRouter();
+  const bottomInset = useBottomInset();
   const { session } = useAuth();
   const activeChildId = useAppStore((s) => s.activeChildId);
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
@@ -87,8 +89,8 @@ export default function FirstWordsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </Pressable>
@@ -132,7 +134,7 @@ export default function FirstWordsScreen() {
         <FlatList
           data={words}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: Spacing.xxl + bottomInset }]}
           renderItem={({ item }) => (
             <Pressable
               style={[styles.wordRow, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -155,7 +157,7 @@ export default function FirstWordsScreen() {
 
       <Modal visible={showAdd} transparent animationType="slide" onRequestClose={() => setShowAdd(false)}>
         <Pressable style={styles.backdrop} onPress={() => setShowAdd(false)} />
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Spacing.lg + bottomInset }]}>
           <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
             Add a word
           </Text>
@@ -191,7 +193,14 @@ export default function FirstWordsScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
+  },
   headerCenter: { flex: 1 },
   title: { fontSize: 22, fontWeight: '800' },
   count: { fontSize: 13 },

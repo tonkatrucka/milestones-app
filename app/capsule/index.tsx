@@ -9,13 +9,13 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO, isFuture, differenceInDays } from 'date-fns';
@@ -25,12 +25,14 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppStore } from '@/store/app-store';
 import { getTimeCapsules, createTimeCapsule, markTimeCapsuleOpened, deleteTimeCapsule } from '@/services/time-capsule';
+import { useBottomInset } from '@/components/shared/KeyboardSafeScreen';
 import type { TimeCapsule } from '@/lib/database.types';
 
 export default function TimeCapsuleScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
   const router = useRouter();
+  const bottomInset = useBottomInset();
   const { session } = useAuth();
   const activeChildId = useAppStore((s) => s.activeChildId);
 
@@ -117,8 +119,8 @@ export default function TimeCapsuleScreen() {
   const unlocked = capsules.filter((c) => !isFuture(parseISO(c.unlock_at)));
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </Pressable>
@@ -151,7 +153,7 @@ export default function TimeCapsuleScreen() {
         <FlatList
           data={[...sealed, ...unlocked]}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: Spacing.xxl + bottomInset }]}
           renderItem={({ item }) => {
             const isSealed = isFuture(parseISO(item.unlock_at));
             const daysLeft = isSealed ? differenceInDays(parseISO(item.unlock_at), new Date()) : 0;
@@ -182,7 +184,7 @@ export default function TimeCapsuleScreen() {
 
       <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
         <Pressable style={styles.backdrop} onPress={() => setShowCreate(false)} />
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Spacing.lg + bottomInset }]}>
           <ScrollView keyboardShouldPersistTaps="handled">
             <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>New time capsule</Text>
 
@@ -212,9 +214,10 @@ export default function TimeCapsuleScreen() {
               <DateTimePicker
                 value={unlockDate}
                 mode="date"
-                display="spinner"
+                display="compact"
                 minimumDate={minDate}
                 onChange={(_, d) => d && setUnlockDate(d)}
+                themeVariant={scheme === 'light' ? 'light' : 'dark'}
               />
             ) : (
               <>
@@ -253,7 +256,14 @@ export default function TimeCapsuleScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.sm,
+  },
   title: { flex: 1, fontSize: 22, fontWeight: '800' },
   addBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   loader: { marginTop: Spacing.xl },

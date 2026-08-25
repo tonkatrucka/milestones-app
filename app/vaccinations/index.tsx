@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -22,12 +23,7 @@ import { useActiveChild } from '@/hooks/use-active-child';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useVaccinations } from '@/hooks/use-vaccinations';
 import { addVaccination, deleteVaccination } from '@/services/vaccinations';
-import {
-  getScheduleWithDates,
-  type VaccineRegion,
-} from '@/constants/vaccination-schedules';
-
-const REGIONS: VaccineRegion[] = ['UK', 'US', 'AU', 'CA'];
+import { getScheduleWithDates, NIP_SCHEDULE_URL } from '@/constants/vaccination-schedules';
 
 export default function VaccinationsScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -39,10 +35,10 @@ export default function VaccinationsScreen() {
   const { canWrite } = useMemberRole(activeChildId, session?.user.id ?? null);
   const { records, isLoading, refresh, addRecord, removeRecord } = useVaccinations(activeChildId);
 
-  const [region, setRegion] = useState<VaccineRegion>('UK');
   const [showLog, setShowLog] = useState(false);
   const [selectedCode, setSelectedCode] = useState('');
   const [selectedName, setSelectedName] = useState('');
+  const [selectedDose, setSelectedDose] = useState(1);
   const [clinic, setClinic] = useState('');
   const [batchNo, setBatchNo] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -50,34 +46,36 @@ export default function VaccinationsScreen() {
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const schedule = activeChild
-    ? getScheduleWithDates(region, activeChild.date_of_birth)
+    ? getScheduleWithDates(activeChild.date_of_birth)
     : [];
 
   const givenCodes = new Set(records.map((r) => `${r.vaccine_code}-${r.dose_number}`));
   const upcoming = schedule
     .filter((v) => !givenCodes.has(`${v.code}-${v.doseNumber}`) && isFuture(v.dueDate))
-    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-    .slice(0, 5);
+    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
-  const handleLogVaccine = (code: string, name: string) => {
+  const handleLogVaccine = (code: string, name: string, doseNumber = 1) => {
     setSelectedCode(code);
     setSelectedName(name);
+    setSelectedDose(doseNumber);
     setClinic('');
     setBatchNo('');
     setShowLog(true);
   };
 
   const handleSave = async () => {
-    if (!activeChildId || !session?.user.id || !selectedCode) return;
+    if (!activeChildId || !session?.user.id || !selectedName) return;
     setIsSaving(true);
     try {
-      const scheduleItem = schedule.find((v) => v.code === selectedCode);
+      const scheduleItem = schedule.find(
+        (v) => v.code === selectedCode && v.doseNumber === selectedDose,
+      );
       const record = await addVaccination({
         childId: activeChildId,
-        vaccineCode: selectedCode,
+        vaccineCode: selectedCode || 'custom',
         vaccineName: selectedName,
         administeredAt: new Date().toISOString().split('T')[0],
-        doseNumber: scheduleItem?.doseNumber ?? 1,
+        doseNumber: scheduleItem?.doseNumber ?? selectedDose,
         clinic: clinic.trim() || undefined,
         batchNumber: batchNo.trim() || undefined,
         userId: session.user.id,
@@ -117,16 +115,18 @@ export default function VaccinationsScreen() {
           </Text>
         </View>
 
-        <View style={styles.regionRow}>
-          {REGIONS.map((r) => (
-            <Pressable
-              key={r}
-              style={[styles.regionChip, { backgroundColor: region === r ? colors.primary : colors.inputBackground }]}
-              onPress={() => setRegion(r)}>
-              <Text style={[styles.regionText, { color: region === r ? '#fff' : colors.muted }]}>{r}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={[styles.source, { color: colors.muted }]}>
+          Australian National Immunisation Program. Extra doses may apply for Aboriginal and Torres
+          Strait Islander children and for some medical conditions.
+        </Text>
+        <Pressable
+          onPress={() => void Linking.openURL(NIP_SCHEDULE_URL)}
+          accessibilityRole="link"
+          accessibilityLabel="Open the National Immunisation Program schedule">
+          <Text style={[styles.sourceLink, { color: colors.primary }]}>
+            View official NIP schedule
+          </Text>
+        </Pressable>
 
         {isLoading ? (
           <ActivityIndicator color={colors.primary} style={styles.loader} />
@@ -135,18 +135,19 @@ export default function VaccinationsScreen() {
             {upcoming.length > 0 && (
               <>
                 <Text style={[styles.sectionLabel, { color: colors.muted }]}>COMING UP</Text>
-                {upcoming.map((v, i) => (
-                  <View key={i} style={[styles.upcomingRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {upcoming.map((v) => (
+                  <View key={`${v.code}-${v.doseNumber}`} style={[styles.upcomingRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={styles.upcomingInfo}>
                       <Text style={[styles.vaccineName, { color: colors.text }]}>{v.name}</Text>
                       <Text style={[styles.vaccineDate, { color: colors.muted }]}>
                         Due {format(v.dueDate, 'd MMM yyyy')}
+                        {v.notes ? ` · ${v.notes}` : ''}
                       </Text>
                     </View>
                     {canWrite && (
                       <Pressable
                         style={[styles.logButton, { borderColor: colors.primary }]}
-                        onPress={() => handleLogVaccine(v.code, v.name)}>
+                        onPress={() => handleLogVaccine(v.code, v.name, v.doseNumber)}>
                         <Text style={[styles.logButtonText, { color: colors.primary }]}>Log</Text>
                       </Pressable>
                     )}
@@ -179,7 +180,7 @@ export default function VaccinationsScreen() {
             {canWrite && (
               <Pressable
                 style={[styles.customLogBtn, { borderColor: colors.border }]}
-                onPress={() => handleLogVaccine('', 'Custom vaccine')}>
+                onPress={() => handleLogVaccine('custom', 'Custom vaccine')}>
                 <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
                 <Text style={[styles.customLogText, { color: colors.primary }]}>Log custom vaccine</Text>
               </Pressable>
@@ -199,7 +200,7 @@ export default function VaccinationsScreen() {
           <Text style={[styles.fieldLabel, { color: colors.muted }]}>Clinic (optional)</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
-            placeholder="e.g. GP surgery"
+            placeholder="e.g. GP clinic"
             placeholderTextColor={colors.muted}
             value={clinic}
             onChangeText={setClinic}
@@ -232,9 +233,8 @@ const styles = StyleSheet.create({
   container: { padding: Spacing.md, gap: Spacing.md, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingTop: Spacing.sm },
   title: { flex: 1, fontSize: 24, fontWeight: '800' },
-  regionRow: { flexDirection: 'row', gap: Spacing.sm },
-  regionChip: { borderRadius: Radius.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
-  regionText: { fontSize: 13, fontWeight: '700' },
+  source: { fontSize: 13, lineHeight: 19 },
+  sourceLink: { fontSize: 13, fontWeight: '700' },
   loader: { marginTop: Spacing.xl },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   upcomingRow: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },

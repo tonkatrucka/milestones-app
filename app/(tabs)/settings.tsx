@@ -465,7 +465,6 @@ export default function SettingsScreen() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [transferChild, setTransferChild] = useState<Child | null>(null);
   const [accountTransferOpen, setAccountTransferOpen] = useState(false);
-  const [isPdfExporting, setIsPdfExporting] = useState(false);
 
   const ownedChildren = children.filter((child) => childRoles[child.id] === 'owner');
   const ownedChildCount = ownedChildren.length;
@@ -646,23 +645,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleExportDoctorSummary = async () => {
-    if (!activeChild) {
-      Alert.alert('No child selected', 'Choose a child profile first, then export their doctor visit summary.');
-      return;
-    }
-    if (isPdfExporting) return;
-    setIsPdfExporting(true);
-    try {
-      const { exportDoctorVisitSummary } = await import('@/services/pdf-export');
-      await exportDoctorVisitSummary(activeChild);
-    } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to generate the doctor visit summary.');
-    } finally {
-      setIsPdfExporting(false);
-    }
-  };
-
   const handleSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -786,49 +768,6 @@ export default function SettingsScreen() {
         )}
 
         <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
-
-        <Section title="Health & Records" colors={colors}>
-          <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            Export a doctor visit summary, or open visits and notes, growth, foods, vaccinations, the checklist, and keepsakes.
-          </Text>
-          <Pressable
-            style={[styles.navRow, { borderColor: colors.border }]}
-            onPress={() => void handleExportDoctorSummary()}
-            disabled={isPdfExporting}
-            accessibilityRole="button"
-            accessibilityLabel="Export doctor visit summary">
-            <Text style={styles.navEmoji}>📄</Text>
-            <View style={styles.navLabelBlock}>
-              <Text style={[styles.navLabelStacked, { color: colors.text }]}>Doctor visit summary</Text>
-              <Text style={[styles.navHint, { color: colors.muted }]}>
-                One-page PDF: measurements, vaccines, allergens, development, and 7-day averages
-              </Text>
-            </View>
-            {isPdfExporting ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Ionicons name="share-outline" size={18} color={colors.muted} />
-            )}
-          </Pressable>
-          {[
-            { label: 'Visits & notes', emoji: '🩺', path: '/health-records' },
-            { label: 'Growth tracker', emoji: '📏', path: '/growth' },
-            { label: 'Foods introduced', emoji: '🥕', path: '/foods' },
-            { label: 'Vaccinations', emoji: '💉', path: '/vaccinations' },
-            { label: 'Developmental checklist', emoji: '🌱', path: '/checklist' },
-            { label: 'First words dictionary', emoji: '💬', path: '/words' },
-            { label: 'Time capsule', emoji: '⏳', path: '/capsule' },
-          ].map(({ label, emoji, path }) => (
-            <Pressable
-              key={path}
-              style={[styles.navRow, { borderColor: colors.border }]}
-              onPress={() => router.push(path as never)}>
-              <Text style={styles.navEmoji}>{emoji}</Text>
-              <Text style={[styles.navLabel, { color: colors.text }]}>{label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </Pressable>
-          ))}
-        </Section>
 
         <Section title="Account" colors={colors}>
           <View style={styles.infoRow}>
@@ -1247,15 +1186,6 @@ const styles = StyleSheet.create({
   childName: { fontSize: 15, fontWeight: '600' },
   childDob: { fontSize: 12 },
   activeLabel: { fontSize: 12, fontWeight: '700' },
-  navRow: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  navEmoji: { fontSize: 20, width: 28 },
-  navLabelBlock: { flex: 1, gap: 2 },
-  navLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
-  navLabelStacked: { fontSize: 15, fontWeight: '600' },
-  navHint: { fontSize: 12, lineHeight: 16 },
   input: {
     borderRadius: Radius.md,
     borderWidth: 1,

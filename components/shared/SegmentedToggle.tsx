@@ -33,7 +33,10 @@ export function SegmentedToggle<T extends string>({
                 styles.label,
                 { color: active ? colors.text : colors.muted },
                 active && styles.labelActive,
-              ]}>
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}>
               {opt.label}
             </Text>
           </Pressable>

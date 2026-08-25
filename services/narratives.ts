@@ -34,23 +34,10 @@ export async function getMonthlyRecaps(childId: string): Promise<MonthlyRecap[]>
       .from('monthly_recaps')
       .select('*')
       .eq('child_id', childId)
-      .order('month_key', { ascending: false })
-      .limit(6);
+      .order('month_key', { ascending: false });
     if (error) return [];
     return (data ?? []) as MonthlyRecap[];
   } catch {
     return [];
   }
-}
-
-export async function generateNarrative(params: {
-  childId: string;
-  kind: 'weekly' | 'monthly';
-}): Promise<string | null> {
-  const { data, error } = await supabase.functions.invoke('generate-narrative', {
-    body: params,
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(String(data.error));
-  return typeof data?.narrative === 'string' ? data.narrative : null;
 }

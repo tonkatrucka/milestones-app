@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
 interface NarrativeCardProps {
@@ -6,9 +6,6 @@ interface NarrativeCardProps {
   text: string | null;
   emptyHint: string;
   colors: typeof Colors.light;
-  onGenerate?: () => void;
-  isGenerating?: boolean;
-  generateLabel?: string;
 }
 
 export function NarrativeCard({
@@ -16,9 +13,6 @@ export function NarrativeCard({
   text,
   emptyHint,
   colors,
-  onGenerate,
-  isGenerating = false,
-  generateLabel = 'Write this story',
 }: NarrativeCardProps) {
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -28,20 +22,6 @@ export function NarrativeCard({
       ) : (
         <Text style={[styles.empty, { color: colors.muted }]}>{emptyHint}</Text>
       )}
-      {onGenerate ? (
-        <Pressable
-          style={[styles.generateBtn, { borderColor: colors.primary }]}
-          onPress={onGenerate}
-          disabled={isGenerating}
-          accessibilityRole="button"
-          accessibilityLabel={generateLabel}>
-          {isGenerating ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Text style={[styles.generateText, { color: colors.primary }]}>{generateLabel}</Text>
-          )}
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -66,19 +46,5 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: 14,
     lineHeight: 20,
-  },
-  generateBtn: {
-    alignSelf: 'flex-start',
-    marginTop: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1.5,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    minHeight: 36,
-    justifyContent: 'center',
-  },
-  generateText: {
-    fontSize: 13,
-    fontWeight: '700',
   },
 });

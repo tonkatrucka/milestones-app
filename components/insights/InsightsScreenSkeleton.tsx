@@ -41,7 +41,6 @@ export function InsightsScreenSkeleton() {
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.md }]}
         showsVerticalScrollIndicator={false}>
-        <CardSkeleton lines={4} />
         <CardSkeleton lines={3} />
         <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
           <Skeleton width="36%" height={20} borderRadius={Radius.sm} />

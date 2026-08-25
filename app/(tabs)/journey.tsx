@@ -20,6 +20,7 @@ import {
   currentMonthKey,
   formatMonthKeyLabel,
 } from '@/lib/local-narrative';
+import { attachMonthlyRecaps } from '@/lib/timeline-sections';
 import type { Memory, Milestone } from '@/lib/database.types';
 
 export default function JourneyScreen() {
@@ -49,6 +50,13 @@ export default function JourneyScreen() {
       section?.memories ?? [],
     );
   }, [activeChild, sections]);
+
+  const thisMonthKey = currentMonthKey();
+  const journalSections = useMemo(() => {
+    if (!activeChild) return sections;
+    const pastRecaps = narratives.recaps.filter((r) => r.month_key !== thisMonthKey);
+    return attachMonthlyRecaps(sections, pastRecaps, activeChild.date_of_birth);
+  }, [activeChild, sections, narratives.recaps, thisMonthKey]);
 
   useFocusEffect(useCallback(() => { refresh(); refreshNarratives(); }, [refresh, refreshNarratives]));
 
@@ -155,7 +163,7 @@ export default function JourneyScreen() {
       </View>
 
       <JourneyTimeline
-        sections={sections}
+        sections={journalSections}
         isLoading={isLoading}
         childDob={activeChild.date_of_birth}
         canWrite={canWrite}
@@ -166,18 +174,12 @@ export default function JourneyScreen() {
               text={narratives.weekly}
               emptyHint={`Log a few feeds, naps, or nappies this week and ${activeChild.name}'s story will appear here.`}
               colors={colors}
-              onGenerate={canWrite ? narratives.generateWeekly : undefined}
-              isGenerating={narratives.isGeneratingWeekly}
-              generateLabel="Write this week's story"
             />
             <NarrativeCard
               label={narratives.monthLabel.toUpperCase()}
               text={narratives.monthly ?? localMonthly}
               emptyHint="Add a milestone or memory this month and a recap will appear here."
               colors={colors}
-              onGenerate={canWrite ? narratives.generateMonthly : undefined}
-              isGenerating={narratives.isGeneratingMonthly}
-              generateLabel="Write this month's recap"
             />
           </View>
         }
