@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -46,6 +46,7 @@ import {
 import type { Child, Invite, MemberRole } from '@/lib/database.types';
 import { TransferOwnershipModal } from '@/components/settings/TransferOwnershipModal';
 import { NotificationSettingsSection } from '@/components/settings/NotificationSettingsSection';
+import { DigestFollowersSection } from '@/components/settings/DigestFollowersSection';
 
 function teamErrorMessage(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'message' in e) {
@@ -438,7 +439,7 @@ export default function SettingsScreen() {
   const scheme = useColorScheme();
   const colors = Colors[scheme];
   const setColorScheme = useThemeStore((s) => s.setColorScheme);
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const router = useRouter();
   const { session, signOut } = useAuth();
   const { activeChild, children } = useActiveChild(session?.user.id ?? null);
@@ -715,11 +716,15 @@ export default function SettingsScreen() {
             Choose how Milestones looks on this device.
           </Text>
           <View style={[styles.schemeRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {(['light', 'dark'] as ColorSchemePreference[]).map((option) => {
-              const active = scheme === option;
+            {([
+              { value: 'light', icon: 'sunny-outline', label: 'Light' },
+              { value: 'dark', icon: 'moon-outline', label: 'Dark' },
+              { value: 'night', icon: 'star-outline', label: 'Night' },
+            ] as { value: ColorSchemePreference; icon: string; label: string }[]).map((option) => {
+              const active = scheme === option.value;
               return (
                 <Pressable
-                  key={option}
+                  key={option.value}
                   style={[
                     styles.schemeOption,
                     active && {
@@ -727,12 +732,12 @@ export default function SettingsScreen() {
                       borderColor: colors.primary,
                     },
                   ]}
-                  onPress={() => setColorScheme(option)}
+                  onPress={() => setColorScheme(option.value)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}>
                   <Ionicons
-                    name={option === 'light' ? 'sunny-outline' : 'moon-outline'}
-                    size={20}
+                    name={option.icon as 'sunny-outline'}
+                    size={18}
                     color={active ? colors.primary : colors.muted}
                   />
                   <Text
@@ -741,13 +746,26 @@ export default function SettingsScreen() {
                       { color: active ? colors.text : colors.muted },
                       active && styles.schemeOptionTextActive,
                     ]}>
-                    {option === 'light' ? 'Light' : 'Dark'}
+                    {option.label}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
+          {scheme === 'night' && (
+            <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
+              🌙 True black OLED screen. Warm amber tones. Designed so your eyes adjust back to sleep faster.
+            </Text>
+          )}
         </Section>
+
+        {activeChild && isOwner && (
+          <DigestFollowersSection
+            childId={activeChild.id}
+            userId={session?.user.id ?? null}
+            colors={colors}
+          />
+        )}
 
         <NotificationSettingsSection userId={session?.user.id ?? null} colors={colors} />
 
@@ -1229,8 +1247,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1.5,
     paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,    // raised from xs (4) to sm (8) → ~34px
+    minHeight: 36,
     flexShrink: 0,
+    justifyContent: 'center',
   },
   editButtonText: {
     fontSize: 13,

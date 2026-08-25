@@ -10,11 +10,12 @@ import { useActivitiesTimeline } from '@/hooks/use-activities-timeline';
 import { useAppStore } from '@/store/app-store';
 import { ActivitiesTimeline } from '@/components/journey/ActivitiesTimeline';
 import { ActivitiesWeekView } from '@/components/journey/ActivitiesWeekView';
+import { HealthRecordsPanel } from '@/components/health/HealthRecordsPanel';
 import { EditEventModal } from '@/components/events/EditEventModal';
 import { SegmentedToggle } from '@/components/shared/SegmentedToggle';
 import type { DailyEvent } from '@/lib/database.types';
 
-type ActivitiesViewMode = 'log' | 'week';
+type ActivitiesViewMode = 'health' | 'log' | 'week';
 
 export default function ActivitiesScreen() {
   const scheme = useColorScheme() ?? 'light';
@@ -29,7 +30,7 @@ export default function ActivitiesScreen() {
     activeChild?.date_of_birth ?? null,
   );
 
-  const [viewMode, setViewMode] = useState<ActivitiesViewMode>('log');
+  const [viewMode, setViewMode] = useState<ActivitiesViewMode>('health');
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
 
   if (isBootstrapping) {
@@ -51,13 +52,7 @@ export default function ActivitiesScreen() {
     );
   }
 
-  if (isLoading && sections.length === 0) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, styles.centred, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
-      </SafeAreaView>
-    );
-  }
+  const showTimelineSpinner = viewMode !== 'health' && isLoading && sections.length === 0;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -66,10 +61,11 @@ export default function ActivitiesScreen() {
           style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}
           numberOfLines={1}
           adjustsFontSizeToFit>
-          {activeChild.name}'s Activities
+          {activeChild.name}&apos;s Log
         </Text>
         <SegmentedToggle
           options={[
+            { key: 'health', label: 'Health' },
             { key: 'log', label: 'Daily log' },
             { key: 'week', label: 'Past week' },
           ]}
@@ -79,7 +75,13 @@ export default function ActivitiesScreen() {
         />
       </View>
 
-      {viewMode === 'log' ? (
+      {viewMode === 'health' ? (
+        <HealthRecordsPanel colors={colors} />
+      ) : showTimelineSpinner ? (
+        <View style={[styles.flex, styles.centred]}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : viewMode === 'log' ? (
         <ActivitiesTimeline
           sections={sections}
           isLoading={isLoading}

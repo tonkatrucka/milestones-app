@@ -1,12 +1,14 @@
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, type AppPalette } from '@/constants/theme';
+import { useColorScheme, type ColorSchemePreference } from '@/hooks/use-color-scheme';
 
 export function useThemeColor(
-  props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark,
+  props: Partial<Record<ColorSchemePreference, string>>,
+  colorName: keyof AppPalette,
 ) {
   const theme = useColorScheme();
-  const colorFromProps = props[theme];
+  // `night` is a dark variant, so callers that only supply light/dark overrides
+  // should still get their dark value rather than falling through to undefined.
+  const colorFromProps = props[theme] ?? (theme === 'night' ? props.dark : undefined);
 
   if (colorFromProps) {
     return colorFromProps;

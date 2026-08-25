@@ -38,7 +38,7 @@ function emptyDay(dateKey: string, date: Date): EventDay {
     dateKey,
     label: format(date, 'EEE d MMM'),
     events: [],
-    counts: { nappy: 0, meal: 0, sleep: 0 },
+    counts: { nappy: 0, meal: 0, sleep: 0, pump: 0, temperature: 0, medication: 0 },
     totalMl: 0,
     totalSleepMins: 0,
     wakeUps: [],
@@ -141,6 +141,43 @@ export interface JourneyMonthSection {
   milestones: Milestone[];
   memories: Memory[];
   entries: JourneyEntry[];
+  recap: string | null;
+}
+
+export function dateFromMonthKey(monthKey: string): Date {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year || 1970, (month || 1) - 1, 1);
+}
+
+/** Attach stored monthly recaps to their journal month, creating months that only have a recap. */
+export function attachMonthlyRecaps(
+  sections: JourneyMonthSection[],
+  recaps: { month_key: string; narrative: string }[],
+  childDob: string,
+): JourneyMonthSection[] {
+  const recapMap = new Map(recaps.map((r) => [r.month_key, r.narrative]));
+  const byKey = new Map(
+    sections.map((section) => [
+      section.monthKey,
+      { ...section, recap: recapMap.get(section.monthKey) ?? section.recap ?? null },
+    ]),
+  );
+
+  for (const recap of recaps) {
+    if (byKey.has(recap.month_key)) continue;
+    const date = dateFromMonthKey(recap.month_key);
+    byKey.set(recap.month_key, {
+      monthKey: recap.month_key,
+      label: format(date, 'MMMM yyyy'),
+      ageLabel: formatAge(childDob, date),
+      milestones: [],
+      memories: [],
+      entries: [],
+      recap: recap.narrative,
+    });
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
 }
 
 export function buildJourneySections(
@@ -159,6 +196,7 @@ export function buildJourneySections(
         milestones: [],
         memories: [],
         entries: [],
+        recap: null,
       });
     }
     return sectionMap.get(monthKey)!;

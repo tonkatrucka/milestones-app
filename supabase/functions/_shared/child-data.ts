@@ -244,6 +244,48 @@ export async function handleReadTool(
   }
 }
 
+// ─── 14-day rolling context summary (for chat memory enrichment) ──────────────
+
+export async function buildRollingContextSummary(
+  adminDb: SupabaseClient,
+  childId: string,
+  days = 14,
+): Promise<string> {
+  const events = await fetchRecentEvents(adminDb, childId, days);
+  if (events.length === 0) return 'No recent activity logged.';
+
+  const counts: Record<string, number> = {};
+  let totalMl = 0;
+  let totalSleepMins = 0;
+  let breastFeeds = 0;
+  let bottleFeeds = 0;
+
+  for (const ev of events) {
+    counts[ev.type] = (counts[ev.type] ?? 0) + 1;
+    const meta = ev.metadata as Record<string, unknown>;
+    if (ev.type === 'meal') {
+      if (meta.amountMl) totalMl += Number(meta.amountMl);
+      if (meta.mealType === 'breast') breastFeeds++;
+      if (meta.mealType === 'bottle') bottleFeeds++;
+    }
+    if (ev.type === 'sleep' && meta.sleepEnd) {
+      const mins = (new Date(meta.sleepEnd as string).getTime() - new Date(ev.occurred_at).getTime()) / 60000;
+      if (mins > 0 && mins < 720) totalSleepMins += mins;
+    }
+  }
+
+  const daysCount = Math.max(1, days);
+  const parts: string[] = [`Last ${days} days:`];
+  if (counts.meal) parts.push(`~${Math.round(counts.meal / daysCount)}/day feeds (${breastFeeds} breast, ${bottleFeeds} bottle${totalMl > 0 ? `, ${Math.round(totalMl / daysCount)}ml/day avg bottle` : ''})`);
+  if (counts.nappy) parts.push(`~${Math.round(counts.nappy / daysCount)}/day nappies`);
+  if (totalSleepMins > 0) parts.push(`~${Math.round(totalSleepMins / daysCount / 60 * 10) / 10}h/day sleep`);
+  if (counts.pump) parts.push(`${counts.pump} pumping sessions`);
+  if (counts.temperature) parts.push(`${counts.temperature} temperature readings`);
+  if (counts.medication) parts.push(`${counts.medication} medication logs`);
+
+  return parts.join(' · ');
+}
+
 function formatSleepDuration(mins: number): string {
   if (mins >= 60) {
     const h = Math.floor(mins / 60);

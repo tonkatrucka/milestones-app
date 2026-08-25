@@ -1,6 +1,6 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from 'expo-router/js-tabs';
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -29,7 +29,7 @@ function CardSkeleton({ lines }: { lines: number }) {
 export function InsightsScreenSkeleton() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -41,7 +41,6 @@ export function InsightsScreenSkeleton() {
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.md }]}
         showsVerticalScrollIndicator={false}>
-        <CardSkeleton lines={4} />
         <CardSkeleton lines={3} />
         <View style={[styles.card, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
           <Skeleton width="36%" height={20} borderRadius={Radius.sm} />

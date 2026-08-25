@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 
 import { Colors, EventColors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -37,6 +37,9 @@ const EVENT_EMOJIS: Record<EventType, string> = {
   nappy: '🧷',
   meal: '🍼',
   sleep: '😴',
+  pump: '🤱',
+  temperature: '🌡️',
+  medication: '💊',
 };
 
 export interface ActivitiesTimelineProps {
@@ -54,7 +57,7 @@ export function ActivitiesTimeline({
 }: ActivitiesTimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
 
   return (
     <ScrollView
@@ -190,8 +193,11 @@ function CollapsibleSection({
   );
 }
 
+/** Only these event types have a per-day tooltip breakdown. */
+type TooltipEventType = 'nappy' | 'meal' | 'sleep';
+
 interface TooltipState {
-  type: EventType;
+  type: TooltipEventType;
   pageX: number;
   pageY: number;
   width: number;
@@ -232,7 +238,7 @@ function EventDayRow({
     overflow: 'hidden',
   }));
 
-  const openTooltip = useCallback((type: EventType, ref: React.RefObject<View | null>) => {
+  const openTooltip = useCallback((type: TooltipEventType, ref: React.RefObject<View | null>) => {
     ref.current?.measure((_x, _y, width, height, pageX, pageY) => {
       setTooltip({ type, pageX, pageY, width, height });
     });

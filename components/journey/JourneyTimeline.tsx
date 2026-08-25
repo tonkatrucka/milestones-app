@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -20,15 +20,16 @@ import Animated, {
 import { Image } from 'expo-image';
 import { differenceInMonths, differenceInYears, format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 
 import { Colors, Fonts, MemoryColor, MilestoneColors, Radius, Spacing } from '@/constants/theme';
 import { ResolvedImage } from '@/components/media/ResolvedImage';
+import { NarrativeCard } from '@/components/shared/NarrativeCard';
 import { CATEGORY_EMOJIS, CATEGORY_LABELS } from '@/constants/milestone-templates';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResolvedMediaUrls } from '@/hooks/use-resolved-media-urls';
 import { parseCalendarDate } from '@/lib/calendar-date';
-import type { JourneyEntry, JourneyMonthSection } from '@/lib/timeline-sections';
+import { dateFromMonthKey, type JourneyEntry, type JourneyMonthSection } from '@/lib/timeline-sections';
 import type { Memory, Milestone, MilestoneCategory } from '@/lib/database.types';
 
 type FilterMode = 'all' | 'milestones' | 'memories';
@@ -84,11 +85,19 @@ function passesDateRange(date: Date, range: DateRange): boolean {
   return date >= cutoff;
 }
 
+function monthOverlapsRange(monthKey: string, range: DateRange): boolean {
+  if (range === 'all') return true;
+  const start = dateFromMonthKey(monthKey);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  return passesDateRange(end, range);
+}
+
 export interface JourneyTimelineProps {
   sections: JourneyMonthSection[];
   isLoading: boolean;
   childDob?: string | null;
   canWrite?: boolean;
+  banner?: ReactNode;
   onRefresh: () => void;
   onMilestonePress: (milestone: Milestone) => void;
   onMemoryPress: (memory: Memory) => void;
@@ -101,6 +110,7 @@ export function JourneyTimeline({
   isLoading,
   childDob,
   canWrite = true,
+  banner,
   onRefresh,
   onMilestonePress,
   onMemoryPress,
@@ -109,7 +119,7 @@ export function JourneyTimeline({
 }: JourneyTimelineProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const [filter, setFilter] = useState<FilterMode>('all');
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
@@ -164,7 +174,13 @@ export function JourneyTimeline({
           if (!passesDateRange(entryDate(entry), dateRange)) return false;
           return true;
         });
-        if (entries.length === 0) return null;
+        if (entries.length === 0) {
+          const recapVisible =
+            Boolean(section.recap) &&
+            filter === 'all' &&
+            monthOverlapsRange(section.monthKey, dateRange);
+          if (!recapVisible) return null;
+        }
         return { ...section, entries };
       })
       .filter((s): s is JourneyMonthSection & { entries: JourneyEntry[] } => s !== null);
@@ -178,6 +194,7 @@ export function JourneyTimeline({
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
       }>
+      {banner}
       <View style={[styles.filterSection, { borderBottomColor: colors.border }]}>
         <View ref={filterBarRef} collapsable={false}>
           <FilterTabs filter={filter} onChange={handleFilterChange} colors={colors} />
@@ -215,10 +232,12 @@ export function JourneyTimeline({
 
       {filteredSections.length === 0 && !isLoading && (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>🗺️</Text>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>The journey begins here</Text>
+          <Text style={styles.emptyEmoji}>📖</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: Fonts!.rounded }]}>
+            This is where their story lives
+          </Text>
           <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            Add milestones and memories to build your timeline.
+            Start with their first smile, first step, or any moment that mattered. Every entry becomes part of a keepsake they&apos;ll have forever.
           </Text>
         </View>
       )}
@@ -470,6 +489,9 @@ function CollapsibleSection({
                 .join(' · ')}
             </Text>
           )}
+          {section.recap ? (
+            <Text style={[styles.sectionRecapBadge, { color: colors.primary }]}>Recap</Text>
+          ) : null}
           <View style={styles.sectionHeaderSpacer} />
           <Animated.View style={chevronStyle}>
             <Ionicons name="chevron-down" size={14} color={colors.muted} />
@@ -478,33 +500,45 @@ function CollapsibleSection({
       </Pressable>
 
       <Animated.View style={[contentStyle, collapsed ? styles.sectionContentCollapsed : styles.sectionContentExpanded]}>
-        <View style={styles.storyList}>
-          <View
-            style={[
-              styles.continuousLine,
-              {
-                backgroundColor: colors.border,
-                left: DATE_COL_WIDTH + MARKER_COL_WIDTH / 2 - 1,
-              },
-            ]}
-          />
-          {section.entries.map((entry, index) => (
-            <StoryPage
-              key={`${entry.kind}-${entry.data.id}`}
-              entry={entry}
-              index={index}
-              childDob={childDob}
-              canWrite={canWrite}
+        {section.recap ? (
+          <View style={styles.sectionRecap}>
+            <NarrativeCard
+              label="MONTHLY RECAP"
+              text={section.recap}
+              emptyHint=""
               colors={colors}
-              onMilestonePress={onMilestonePress}
-              onMemoryPress={onMemoryPress}
-              onMilestoneDelete={onMilestoneDelete}
-              onMemoryDelete={onMemoryDelete}
-              onPhotoPress={onPhotoPress}
-              onSwipeableWillOpen={handleSwipeableWillOpen}
             />
-          ))}
-        </View>
+          </View>
+        ) : null}
+        {section.entries.length > 0 ? (
+          <View style={styles.storyList}>
+            <View
+              style={[
+                styles.continuousLine,
+                {
+                  backgroundColor: colors.border,
+                  left: DATE_COL_WIDTH + MARKER_COL_WIDTH / 2 - 1,
+                },
+              ]}
+            />
+            {section.entries.map((entry, index) => (
+              <StoryPage
+                key={`${entry.kind}-${entry.data.id}`}
+                entry={entry}
+                index={index}
+                childDob={childDob}
+                canWrite={canWrite}
+                colors={colors}
+                onMilestonePress={onMilestonePress}
+                onMemoryPress={onMemoryPress}
+                onMilestoneDelete={onMilestoneDelete}
+                onMemoryDelete={onMemoryDelete}
+                onPhotoPress={onPhotoPress}
+                onSwipeableWillOpen={handleSwipeableWillOpen}
+              />
+            ))}
+          </View>
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -532,10 +566,6 @@ function SwipeableStoryCard({
     action();
   }, []);
 
-  if (!canWrite) {
-    return <View style={styles.swipeableContainer}>{children}</View>;
-  }
-
   const renderRightActions = useCallback(
     () => (
       <View style={styles.swipeActions}>
@@ -557,8 +587,14 @@ function SwipeableStoryCard({
         </Pressable>
       </View>
     ),
-    [closeAnd, colors.primary, onDelete, onEdit],
+    [closeAnd, colors.primary, colors.danger, onDelete, onEdit],
   );
+
+  // Must come after every hook: `canWrite` resolves asynchronously, so an early
+  // return above would change the hook count between renders.
+  if (!canWrite) {
+    return <View style={styles.swipeableContainer}>{children}</View>;
+  }
 
   return (
     <Swipeable
@@ -1064,6 +1100,8 @@ const styles = StyleSheet.create({
   sectionMonth: { fontSize: 15, fontWeight: '700' },
   sectionAge: { fontSize: 12, fontWeight: '500' },
   sectionCounts: { fontSize: 11, fontWeight: '500', flexShrink: 1 },
+  sectionRecapBadge: { fontSize: 11, fontWeight: '700' },
+  sectionRecap: { marginTop: Spacing.sm },
   storyList: {
     position: 'relative',
     paddingBottom: Spacing.md,

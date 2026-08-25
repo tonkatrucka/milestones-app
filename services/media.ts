@@ -1,4 +1,3 @@
-import { File } from 'expo-file-system';
 import { EncodingType, readAsStringAsync } from 'expo-file-system/legacy';
 import { encodeStorageRef, storageBucketForObject, storageObjectPath } from '@/lib/media-ref';
 import { opaqueMediaPath } from '@/lib/media-path';
@@ -11,6 +10,7 @@ const MILESTONE_BUCKET = 'milestone-media';
 /** Read a local file URI into an ArrayBuffer — required for Supabase Storage on React Native. */
 export async function readUriAsArrayBuffer(localUri: string): Promise<ArrayBuffer> {
   try {
+    const { File } = await import('expo-file-system');
     return await new File(localUri).arrayBuffer();
   } catch {
     // Image-picker URIs (content://, ph://) often fail the new File API.
@@ -96,6 +96,15 @@ export async function uploadChatMediaBatch(
   localUris: string[],
 ): Promise<string[]> {
   return Promise.all(localUris.map((uri) => uploadChatMedia(childId, uri)));
+}
+
+/** Upload an audio note (m4a/mp4/aac) to the milestone-media bucket. Returns the storage path. */
+export async function uploadAudioNote(
+  childId: string,
+  localUri: string,
+): Promise<string> {
+  const path = opaqueMediaPath(childId, 'aud');
+  return uploadToBucket(MILESTONE_BUCKET, path, localUri, 'audio/m4a', childId);
 }
 
 export async function uploadChildAvatar(

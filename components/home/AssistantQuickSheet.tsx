@@ -271,11 +271,11 @@ function QuickAssistantSheetBody({
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}>
-              Assistant
+              Ask Milestones
             </Text>
             {childName ? (
               <Text style={[styles.subtitle, { color: colors.muted }]}>
-                Quick log for {childName}
+                Log or ask anything about {childName}
               </Text>
             ) : null}
           </View>
@@ -352,11 +352,11 @@ function FullAssistantSheetBody({
                 styles.titleFull,
                 { color: colors.text, fontFamily: Fonts!.rounded },
               ]}>
-              Assistant
+              Ask Milestones
             </Text>
             {childName ? (
               <Text style={[styles.subtitle, { color: colors.muted }]}>
-                Tell me about {childName}'s day
+                Log or ask anything about {childName}
               </Text>
             ) : null}
           </View>
@@ -391,7 +391,7 @@ export function AssistantFab({ onPress }: AssistantFabProps) {
       style={[styles.fab, { backgroundColor: colors.primary }]}
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel="Open assistant">
+      accessibilityLabel="Ask Milestones — log or ask anything">
       <Ionicons name="chatbubble-ellipses" size={26} color={colors.onPrimary} />
     </Pressable>
   );
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   quickRoot: {

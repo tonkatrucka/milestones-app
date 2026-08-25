@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js';
 import {
   answerSimpleQuery,
   buildTodaySnapshotText,
+  buildRollingContextSummary,
   handleReadTool,
 } from '../_shared/child-data.ts';
 import {
@@ -766,12 +767,10 @@ Deno.serve(async (req: Request) => {
     // ── Build system prompt ───────────────────────────────────────────────────
     const age = calculateAge(child.date_of_birth, currentDate);
 
-    const todaySnapshot = await buildTodaySnapshotText(
-      adminDb,
-      child.id,
-      child.name,
-      currentDate,
-    );
+    const [todaySnapshot, rollingContext] = await Promise.all([
+      buildTodaySnapshotText(adminDb, child.id, child.name, currentDate),
+      buildRollingContextSummary(adminDb, child.id, 14),
+    ]);
 
     const batchUserTexts = messages
       .filter((m) => m.role === 'user' && typeof m.content === 'string')
@@ -794,7 +793,9 @@ Deno.serve(async (req: Request) => {
 
     const dynamicSystemPrompt = `You are helping the parents of ${child.name}, who is ${age} (born ${child.date_of_birth}). Today is ${currentDate}.
 
-Today snapshot: ${todaySnapshot}${contextBlock}`;
+Today snapshot: ${todaySnapshot}
+
+14-day pattern: ${rollingContext}${contextBlock}`;
 
     // Static instructions cached; child/date/context sent as a separate uncached block
     const systemParam = [

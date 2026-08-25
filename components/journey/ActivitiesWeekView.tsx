@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
-import { useBottomTabBarHeight } from 'expo-router/js-tabs';
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -67,7 +67,7 @@ export function ActivitiesWeekView({
 }: ActivitiesWeekViewProps) {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const hasEvents = weekHasEvents(weekDays);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -301,16 +301,23 @@ function DayColumn({
         item.kind === 'sleepSegment' ? (
           <SleepBar key={item.id} segment={item} chartHeight={chartHeight} />
         ) : (
-          <PointMarker
-            key={item.id}
-            item={item}
-            colors={colors}
-            chartHeight={chartHeight}
-            hovered={hoveredId === item.id}
-            onPress={onPointPress}
-            onHoverChange={onPointHoverChange}
-            onLongPress={item.event && onEventLongPress ? () => onEventLongPress(item.event) : undefined}
-          />
+          (() => {
+            const event = item.event;
+            return (
+              <PointMarker
+                key={item.id}
+                item={item}
+                colors={colors}
+                chartHeight={chartHeight}
+                hovered={hoveredId === item.id}
+                onPress={onPointPress}
+                onHoverChange={onPointHoverChange}
+                onLongPress={
+                  event && onEventLongPress ? () => onEventLongPress(event) : undefined
+                }
+              />
+            );
+          })()
         ),
       )}
     </View>
@@ -581,7 +588,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   hourGrid: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 0,
   },
   hourGridLineDashed: {

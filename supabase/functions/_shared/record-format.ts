@@ -1,7 +1,7 @@
 // Shared record formatting for edge functions — mirrors lib/event-display.ts and
 // lib/timeline-sections.ts so assistant answers match the UI.
 
-export type EventType = 'nappy' | 'meal' | 'sleep';
+export type EventType = 'nappy' | 'meal' | 'sleep' | 'pump' | 'temperature' | 'medication';
 
 export interface DailyEvent {
   id: string;
@@ -109,7 +109,10 @@ export function formatEventTime(event: DailyEvent): string {
 }
 
 export function formatEventSummary(event: DailyEvent): string {
-  const labels: Record<EventType, string> = { nappy: 'Nappy', meal: 'Meal', sleep: 'Sleep' };
+  const labels: Record<EventType, string> = {
+    nappy: 'Nappy', meal: 'Meal', sleep: 'Sleep',
+    pump: 'Pump', temperature: 'Temperature', medication: 'Medication',
+  };
   const detail = getEventDetail(event);
   return detail ? `${labels[event.type]} · ${detail}` : labels[event.type];
 }
@@ -118,7 +121,7 @@ function emptyDay(dateKey: string): EventDay {
   return {
     dateKey,
     events: [],
-    counts: { nappy: 0, meal: 0, sleep: 0 },
+    counts: { nappy: 0, meal: 0, sleep: 0, pump: 0, temperature: 0, medication: 0 },
     totalMl: 0,
     totalSleepMins: 0,
     nappyByType: {},

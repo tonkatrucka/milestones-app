@@ -1,0 +1,32 @@
+name: Weekly email digest
+
+on:
+  schedule:
+    # Every Sunday at 7:30pm UTC (30 min after weekly narrative)
+    - cron: '30 19 * * 0'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke digest-send edge function
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -z "$SUPABASE_URL" ]] && missing+=(SUPABASE_URL)
+          [[ -z "$SUPABASE_SERVICE_ROLE_KEY" ]] && missing+=(SUPABASE_SERVICE_ROLE_KEY)
+          [[ -z "$CRON_SECRET" ]] && missing+=(CRON_SECRET)
+          if ((${#missing[@]})); then
+            echo "::error::Missing repository secrets: ${missing[*]}"
+            exit 1
+          fi
+          curl -sS -f -X POST "$SUPABASE_URL/functions/v1/digest-send" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}'

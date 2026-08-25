@@ -2,10 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,7 +18,9 @@ import { useActiveChild } from '@/hooks/use-active-child';
 import { useRequireCanWrite } from '@/hooks/use-member-role';
 import { useAppStore } from '@/store/app-store';
 import { createMemory } from '@/services/memories';
-import { uploadMemoryMedia } from '@/services/media';
+import { uploadMemoryMedia, uploadAudioNote } from '@/services/media';
+import { KeyboardSafeScreen } from '@/components/shared/KeyboardSafeScreen';
+import { VoiceRecorder } from '@/components/shared/LazyVoiceRecorder';
 
 function formatDateInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -54,7 +53,7 @@ export default function NewMemoryScreen() {
   const { session } = useAuth();
   const { activeChild } = useActiveChild(session?.user.id ?? null);
   const activeChildId = useAppStore((s) => s.activeChildId);
-  const { isLoading: isRoleLoading } = useRequireCanWrite(activeChildId, session?.user.id ?? null);
+  useRequireCanWrite(activeChildId, session?.user.id ?? null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -64,6 +63,8 @@ export default function NewMemoryScreen() {
     return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
   });
   const [photos, setPhotos] = useState<string[]>([]);
+  const [audioLocalUri, setAudioLocalUri] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const pickPhoto = async () => {
@@ -101,6 +102,11 @@ export default function NewMemoryScreen() {
         mediaUrls.push(url);
       }
 
+      let audioUrl: string | undefined;
+      if (audioLocalUri) {
+        audioUrl = await uploadAudioNote(activeChildId, audioLocalUri);
+      }
+
       await createMemory({
         childId: activeChildId,
         title: title.trim(),
@@ -108,6 +114,8 @@ export default function NewMemoryScreen() {
         occurredAt,
         tags: parseTags(tags),
         mediaUrls,
+        audioUrl,
+        isPrivate,
         userId: session.user.id,
       });
 
@@ -120,13 +128,9 @@ export default function NewMemoryScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+    <KeyboardSafeScreen
+      backgroundColor={colors.background}
+      contentContainerStyle={styles.container}>
         <Text style={[styles.heading, { color: colors.text, fontFamily: Fonts!.rounded }]}>
           New Memory
         </Text>
@@ -204,6 +208,29 @@ export default function NewMemoryScreen() {
           )}
         </View>
 
+        <View>
+          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Voice note (optional)</Text>
+          <VoiceRecorder
+            existingAudioUri={null}
+            onRecordingComplete={setAudioLocalUri}
+            onRecordingDeleted={() => setAudioLocalUri(null)}
+          />
+        </View>
+
+        <Pressable
+          style={[styles.privateToggle, { borderColor: colors.border, backgroundColor: isPrivate ? colors.primary + '15' : colors.elevated }]}
+          onPress={() => setIsPrivate((v) => !v)}>
+          <Text style={styles.privateEmoji}>{isPrivate ? '🔒' : '👁️'}</Text>
+          <View style={styles.privateInfo}>
+            <Text style={[styles.privateTitle, { color: colors.text }]}>
+              {isPrivate ? 'Private memory' : 'Shared with team'}
+            </Text>
+            <Text style={[styles.privateSubtitle, { color: colors.muted }]}>
+              {isPrivate ? 'Only you can see this' : 'Visible to caregivers and viewers'}
+            </Text>
+          </View>
+        </Pressable>
+
         <Pressable
           style={[styles.saveButton, { backgroundColor: MemoryColor }, isLoading && { opacity: 0.7 }]}
           onPress={handleSave}
@@ -214,17 +241,14 @@ export default function NewMemoryScreen() {
             <Text style={styles.saveButtonText}>Save memory</Text>
           )}
         </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardSafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   container: {
     padding: Spacing.lg,
     gap: Spacing.lg,
-    paddingBottom: 60,
   },
   heading: {
     fontSize: 26,
@@ -271,6 +295,18 @@ const styles = StyleSheet.create({
   },
   addPhotoIcon: { fontSize: 32, lineHeight: 36 },
   photoHint: { fontSize: 12, marginTop: Spacing.xs },
+  privateToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+  },
+  privateEmoji: { fontSize: 22 },
+  privateInfo: { flex: 1 },
+  privateTitle: { fontSize: 14, fontWeight: '600' },
+  privateSubtitle: { fontSize: 12, marginTop: 2 },
   saveButton: {
     borderRadius: Radius.md,
     paddingVertical: Spacing.md,

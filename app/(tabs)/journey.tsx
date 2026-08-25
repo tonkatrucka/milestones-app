@@ -1,18 +1,26 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Colors, Fonts, MemoryColor, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveChild } from '@/hooks/use-active-child';
 import { useMemberRole } from '@/hooks/use-member-role';
 import { useJourneyTimeline } from '@/hooks/use-journey-timeline';
+import { useNarratives } from '@/hooks/use-narratives';
 import { useAppStore } from '@/store/app-store';
 import { JourneyTimeline } from '@/components/journey/JourneyTimeline';
 import { JourneyScreenSkeleton } from '@/components/journey/JourneyScreenSkeleton';
+import { NarrativeCard } from '@/components/shared/NarrativeCard';
 import { deleteMemory } from '@/services/memories';
 import { deleteMilestone } from '@/services/milestones';
+import {
+  buildLocalMonthlyRecap,
+  currentMonthKey,
+  formatMonthKeyLabel,
+} from '@/lib/local-narrative';
+import { attachMonthlyRecaps } from '@/lib/timeline-sections';
 import type { Memory, Milestone } from '@/lib/database.types';
 
 export default function JourneyScreen() {
@@ -28,8 +36,55 @@ export default function JourneyScreen() {
     activeChildId,
     activeChild?.date_of_birth ?? null,
   );
+  const narratives = useNarratives(activeChildId, activeChild?.name ?? null);
+  const refreshNarratives = narratives.refresh;
 
-  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
+  const localMonthly = useMemo(() => {
+    if (!activeChild) return null;
+    const key = currentMonthKey();
+    const section = sections.find((s) => s.monthKey === key);
+    return buildLocalMonthlyRecap(
+      activeChild.name,
+      formatMonthKeyLabel(key),
+      section?.milestones ?? [],
+      section?.memories ?? [],
+    );
+  }, [activeChild, sections]);
+
+  const thisMonthKey = currentMonthKey();
+  const journalSections = useMemo(() => {
+    if (!activeChild) return sections;
+    const pastRecaps = narratives.recaps.filter((r) => r.month_key !== thisMonthKey);
+    return attachMonthlyRecaps(sections, pastRecaps, activeChild.date_of_birth);
+  }, [activeChild, sections, narratives.recaps, thisMonthKey]);
+
+  useFocusEffect(useCallback(() => { refresh(); refreshNarratives(); }, [refresh, refreshNarratives]));
+
+  // Schedule On This Day notifications whenever Journey data loads
+  useEffect(() => {
+    if (!activeChild || sections.length === 0) return;
+    const allMilestones = sections.flatMap((s) =>
+      s.entries.filter((e) => e.kind === 'milestone').map((e) => e.data),
+    );
+    const allMemories = sections.flatMap((s) =>
+      s.entries.filter((e) => e.kind === 'memory').map((e) => e.data),
+    );
+    void import('@/services/on-this-day')
+      .then((mod) => {
+        const matches = mod.findOnThisDayMatches(allMilestones, allMemories);
+        return mod.scheduleOnThisDayNotification(matches, activeChild.name);
+      })
+      .catch(() => null);
+  }, [sections, activeChild]);
+
+  useEffect(() => {
+    if (!activeChild) return;
+    void import('@/services/on-this-day')
+      .then((mod) =>
+        mod.scheduleMonthlyBirthdayPrompts(activeChild.date_of_birth, activeChild.name),
+      )
+      .catch(() => null);
+  }, [activeChild?.id]);
 
   const handleMilestoneDelete = useCallback(
     (milestone: Milestone) => {
@@ -73,7 +128,7 @@ export default function JourneyScreen() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.flex, { backgroundColor: colors.background }]}>
         <View style={styles.centred}>
-          <Text style={styles.emptyEmoji}>🗺️</Text>
+          <Text style={styles.emptyEmoji}>📖</Text>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No child selected</Text>
         </View>
       </SafeAreaView>
@@ -88,7 +143,7 @@ export default function JourneyScreen() {
             style={[styles.title, { color: colors.text, fontFamily: Fonts!.rounded }]}
             numberOfLines={1}
             adjustsFontSizeToFit>
-            {activeChild.name}'s Journey
+            {activeChild.name}&apos;s Journal
           </Text>
         </View>
         {canWrite && (
@@ -108,11 +163,27 @@ export default function JourneyScreen() {
       </View>
 
       <JourneyTimeline
-        sections={sections}
+        sections={journalSections}
         isLoading={isLoading}
         childDob={activeChild.date_of_birth}
         canWrite={canWrite}
-        onRefresh={refresh}
+        banner={
+          <View>
+            <NarrativeCard
+              label="THIS WEEK"
+              text={narratives.weekly}
+              emptyHint={`Log a few feeds, naps, or nappies this week and ${activeChild.name}'s story will appear here.`}
+              colors={colors}
+            />
+            <NarrativeCard
+              label={narratives.monthLabel.toUpperCase()}
+              text={narratives.monthly ?? localMonthly}
+              emptyHint="Add a milestone or memory this month and a recap will appear here."
+              colors={colors}
+            />
+          </View>
+        }
+        onRefresh={() => { refresh(); void narratives.refresh(); }}
         onMilestonePress={(milestone: Milestone) =>
           router.push(`/milestone/${milestone.id}` as never)
         }

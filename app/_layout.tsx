@@ -1,14 +1,15 @@
 import { useCallback, useEffect } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { DefaultTheme, DarkTheme, ThemeProvider } from "expo-router/react-navigation";
+import { DefaultTheme, DarkTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+import { LaunchErrorBoundary } from '@/components/shared/LaunchErrorBoundary';
 import { useAuth } from '@/hooks/use-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -16,12 +17,6 @@ import { getPendingInviteToken } from '@/lib/pending-invite';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { usePendingMealQuickLogStore } from '@/store/pending-meal-quick-log-store';
 import { usePendingSleepQuickLogStore } from '@/store/pending-sleep-quick-log-store';
-import {
-  configureBreastFeedingNotifications,
-  initBreastFeedingTimerListeners,
-} from '@/services/breast-feeding-timer';
-import { initSleepTimerListeners } from '@/services/sleep-timer';
-import { registerPushToken } from '@/services/push-notifications';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -29,8 +24,8 @@ export const unstable_settings = {
 
 function useNavigationTheme() {
   const scheme = useColorScheme();
-  const palette = Colors[scheme];
-  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  const palette = Colors[scheme] ?? Colors.light;
+  const base = scheme === 'dark' || scheme === 'night' ? DarkTheme : DefaultTheme;
 
   return {
     ...base,
@@ -46,15 +41,6 @@ function useNavigationTheme() {
   };
 }
 
-/**
- * Handles Supabase deep links for email confirmation and password recovery.
- *
- * Supabase appends tokens as a URL hash fragment, e.g.:
- *   milestones://#access_token=xxx&refresh_token=yyy&type=recovery
- *
- * We parse that fragment manually (URLSearchParams on hash), call setSession
- * to hydrate Supabase's auth state, then navigate to the appropriate screen.
- */
 function useDeepLinkAuth() {
   const router = useRouter();
 
@@ -79,17 +65,13 @@ function useDeepLinkAuth() {
     if (type === 'recovery') {
       router.push('/reset-password' as any);
     }
-    // type === 'signup' means email confirmed — session is now live and
-    // the route guard will redirect to (tabs) automatically.
   }, [router]);
 
   useEffect(() => {
-    // URL that cold-launched the app
-    Linking.getInitialURL().then(url => {
+    Linking.getInitialURL().then((url) => {
       if (url) handleUrl(url);
-    });
+    }).catch(() => {});
 
-    // URL received while app is already open
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
   }, [handleUrl]);
@@ -111,7 +93,7 @@ function useActivityDeepLinks() {
   useEffect(() => {
     Linking.getInitialURL().then((url) => {
       if (url) handleUrl(url);
-    });
+    }).catch(() => {});
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
   }, [handleUrl]);
@@ -131,10 +113,6 @@ function ConfigErrorScreen() {
 }
 
 export default function RootLayout() {
-  if (!isSupabaseConfigured) {
-    return <ConfigErrorScreen />;
-  }
-
   const navigationTheme = useNavigationTheme();
   const colorScheme = useColorScheme();
   const { session, isLoading } = useAuth();
@@ -145,31 +123,46 @@ export default function RootLayout() {
   useActivityDeepLinks();
 
   useEffect(() => {
-    configureBreastFeedingNotifications();
-    initBreastFeedingTimerListeners();
-    initSleepTimerListeners();
+    if (!isSupabaseConfigured) return;
+
+    void import('@/services/breast-feeding-timer')
+      .then((mod) => {
+        try {
+          mod.configureBreastFeedingNotifications();
+          mod.initBreastFeedingTimerListeners();
+        } catch (error) {
+          console.warn('[timers] breast init failed', error);
+        }
+      })
+      .catch((error) => console.warn('[timers] breast import failed', error));
+
+    void import('@/services/sleep-timer')
+      .then((mod) => {
+        try {
+          mod.initSleepTimerListeners();
+        } catch (error) {
+          console.warn('[timers] sleep init failed', error);
+        }
+      })
+      .catch((error) => console.warn('[timers] sleep import failed', error));
   }, []);
 
   useEffect(() => {
     if (!session?.user.id) return;
-    registerPushToken(session.user.id).catch(() => {});
+    void import('@/services/push-notifications')
+      .then((mod) => mod.registerPushToken(session.user.id).catch(() => {}))
+      .catch(() => {});
   }, [session?.user.id]);
 
   useEffect(() => {
     if (isLoading) return;
 
-    // Auth screens live at /login, /register, /forgot-password, /reset-password
-    // (Expo Router 6 strips route-group prefixes from the URL, so we check
-    // the actual pathname rather than useSegments() which can omit group names.)
     const isAuthScreen =
       pathname === '/login' ||
       pathname === '/register' ||
       pathname === '/forgot-password' ||
       pathname === '/reset-password';
     const isInviteScreen = pathname.startsWith('/invite/');
-
-    // Keep the user on /reset-password while they set a new password
-    // even though they have a valid (recovery) session.
     const isResetPassword = pathname === '/reset-password';
 
     if (!session && !isAuthScreen && !isInviteScreen) {
@@ -177,6 +170,8 @@ export default function RootLayout() {
     } else if (session && isAuthScreen && !isResetPassword) {
       getPendingInviteToken().then((pending) => {
         router.replace((pending ? `/invite/${pending}` : '/') as never);
+      }).catch(() => {
+        router.replace('/' as never);
       });
     }
   }, [session, isLoading, pathname]);
@@ -189,14 +184,17 @@ export default function RootLayout() {
       if (pending) {
         router.replace(`/invite/${pending}` as never);
       }
-    });
+    }).catch(() => {});
   }, [session, isLoading, pathname, router]);
 
+  if (!isSupabaseConfigured) {
+    return <ConfigErrorScreen />;
+  }
+
   return (
+    <LaunchErrorBoundary>
     <GestureHandlerRootView style={styles.root}>
-    <KeyboardProvider
-      statusBarTranslucent={Platform.OS === 'android'}
-      navigationBarTranslucent={Platform.OS === 'android'}>
+    <KeyboardProvider>
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
     <ThemeProvider value={navigationTheme}>
       <Stack>
@@ -211,13 +209,22 @@ export default function RootLayout() {
         <Stack.Screen name="memory/[id]" options={{ title: 'Edit memory' }} />
         <Stack.Screen name="share/card" options={{ presentation: 'modal', title: 'Share' }} />
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', title: 'Accept invite' }} />
+        <Stack.Screen name="growth" options={{ headerShown: false }} />
+        <Stack.Screen name="foods" options={{ headerShown: false }} />
+        <Stack.Screen name="vaccinations" options={{ headerShown: false }} />
+        <Stack.Screen name="capsule" options={{ headerShown: false }} />
+        <Stack.Screen name="words" options={{ headerShown: false }} />
+        <Stack.Screen name="checklist" options={{ headerShown: false }} />
+        <Stack.Screen name="health-records" options={{ headerShown: false }} />
+        <Stack.Screen name="visit-summary" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={colorScheme === 'light' ? 'dark' : 'light'} />
     </ThemeProvider>
     </SafeAreaProvider>
     </KeyboardProvider>
     </GestureHandlerRootView>
+    </LaunchErrorBoundary>
   );
 }
 

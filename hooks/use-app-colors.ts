@@ -3,5 +3,5 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function useAppColors() {
   const scheme = useColorScheme();
-  return Colors[scheme];
+  return Colors[scheme] ?? Colors.light;
 }

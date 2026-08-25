@@ -17,3 +17,9 @@ otp_length = 8
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
+
+[functions.digest-react]
+verify_jwt = false
+
+[functions.digest-unsubscribe]
+verify_jwt = false

@@ -10,9 +10,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useSafeBottomTabBarHeight } from '@/hooks/use-safe-tab-bar-height';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { ChildAvatar } from '@/components/children/ChildAvatar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/use-auth';
@@ -26,14 +26,21 @@ import { TodayFeed } from '@/components/home/TodayFeed';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EditEventModal } from '@/components/events/EditEventModal';
 import { AssistantFab, AssistantQuickSheet } from '@/components/home/AssistantQuickSheet';
-import { logEvent, updateEvent } from '@/services/events';
+import { VoiceLogSheet, VoiceFab } from '@/components/home/VoiceLogSheet';
+import { NapPredictionCard } from '@/components/home/NapPredictionCard';
+import { WellbeingPrompt } from '@/components/home/WellbeingPrompt';
+import { HandoffSummarySheet } from '@/components/home/HandoffSummarySheet';
+import { logEvent, updateEvent, getRecentEvents } from '@/services/events';
 import {
   startSleepTimer,
   stopSleepTimer,
   syncSleepTimerWithOpenEvent,
 } from '@/services/sleep-timer';
+import { ensureLocalChannel } from '@/services/local-notifications';
+import { getTodayCheckin } from '@/services/wellbeing';
 import type { DailyEvent, EventType, SleepMetadata } from '@/lib/database.types';
 import { useLogConfirmationStore } from '@/store/log-confirmation-store';
+import { useSleepPrediction } from '@/hooks/use-sleep-prediction';
 import { differenceInMonths, differenceInYears } from 'date-fns';
 
 function formatAge(dob: string): string {
@@ -51,7 +58,7 @@ function formatAge(dob: string): string {
 export default function HomeScreen() {
   const scheme = useColorScheme() ?? 'light';
   const colors = Colors[scheme];
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
   const { activeChild, children, isBootstrapping } = useActiveChild(session?.user.id ?? null);
@@ -78,7 +85,14 @@ export default function HomeScreen() {
   const [showChildPicker, setShowChildPicker] = useState(false);
   const [editingEvent, setEditingEvent] = useState<DailyEvent | null>(null);
   const [showAssistant, setShowAssistant] = useState(false);
+  const [showVoiceLog, setShowVoiceLog] = useState(false);
+  const [showHandoff, setShowHandoff] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [highlightEventId, setHighlightEventId] = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<DailyEvent[]>([]);
+  const [showWellbeing, setShowWellbeing] = useState(false);
+  const [wellbeingDismissed, setWellbeingDismissed] = useState(false);
+  const prediction = useSleepPrediction(recentEvents);
 
   const openAssistant = useCallback(() => {
     if (Platform.OS === 'android') {
@@ -87,6 +101,25 @@ export default function HomeScreen() {
     }
     setShowAssistant(true);
   }, [router]);
+
+  // Fetch recent events for sleep predictions + handoff
+  useEffect(() => {
+    if (!activeChildId) return;
+    getRecentEvents(activeChildId, 14)
+      .then(setRecentEvents)
+      .catch(() => null);
+  }, [activeChildId, todayEvents]);
+
+  // Check if parent should see the wellbeing prompt today
+  useEffect(() => {
+    if (!session?.user.id || !activeChildId || wellbeingDismissed) return;
+    getTodayCheckin(session.user.id, activeChildId)
+      .then((checkin) => { if (!checkin) setShowWellbeing(true); })
+      .catch(() => null);
+  }, [session?.user.id, activeChildId, wellbeingDismissed]);
+
+  // Ensure local notification channel exists (Android)
+  useEffect(() => { void ensureLocalChannel(); }, []);
 
   const feedRef = useRef<View>(null);
   const pending = useLogConfirmationStore((s) => s.pending);
@@ -219,7 +252,7 @@ export default function HomeScreen() {
                 style={[styles.childName, { color: colors.text, fontFamily: Fonts!.rounded }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit>
-                {activeChild.name}'s Recent Activity
+                {activeChild.name}&apos;s Recent Activity
               </Text>
               <Text style={[styles.childAge, { color: colors.muted }]}>
                 {formatAge(activeChild.date_of_birth)}
@@ -260,9 +293,9 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Quick log cards */}
+        {/* Zone 1 — Quick log cards */}
         <View style={styles.cardsRow}>
-          {(['nappy', 'meal', 'sleep'] as EventType[]).map((type) => (
+          {(['nappy', 'meal', 'sleep'] as const).map((type) => (
             <QuickLogCard
               key={type}
               type={type}
@@ -276,6 +309,48 @@ export default function HomeScreen() {
           ))}
         </View>
 
+        {/* More actions — collapsed by default, tap to expand */}
+        {canWrite && (
+          <View>
+            <Pressable
+              style={[styles.moreActionsToggle, { borderColor: colors.border }]}
+              onPress={() => setShowMoreActions((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showMoreActions ? 'Hide more actions' : 'Show more actions'}>
+              <Text style={[styles.moreActionsLabel, { color: colors.muted }]}>
+                {showMoreActions ? '▲ Less' : '▼ Pump · Temp · Meds · Handoff'}
+              </Text>
+            </Pressable>
+            {showMoreActions && (
+              <View style={styles.secondaryRow}>
+                {(['pump', 'temperature', 'medication'] as EventType[]).map((type) => (
+                  <Pressable
+                    key={type}
+                    style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+                    onPress={() => router.push(`/log/${type}` as never)}>
+                    <Text style={styles.secondaryChipEmoji}>
+                      {type === 'pump' ? '🤱' : type === 'temperature' ? '🌡️' : '💊'}
+                    </Text>
+                    <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+                <Pressable
+                  style={[styles.secondaryChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}
+                  onPress={() => setShowHandoff(true)}>
+                  <Text style={styles.secondaryChipEmoji}>🤝</Text>
+                  <Text style={[styles.secondaryChipLabel, { color: colors.text }]}>Handoff</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Zone 2 — Status at a glance */}
+        <NapPredictionCard prediction={prediction} />
+
+        {/* Zone 3 — Today's log history */}
         <View ref={feedRef} onLayout={measureTimelineTop} collapsable={false}>
           <TodayFeed
             events={todayEvents}
@@ -285,6 +360,16 @@ export default function HomeScreen() {
             onEventLongPress={canWrite ? setEditingEvent : undefined}
           />
         </View>
+
+        {/* Wellbeing prompt at the bottom of the feed — gentle, not intrusive */}
+        {showWellbeing && !wellbeingDismissed && session?.user.id && activeChildId && (
+          <WellbeingPrompt
+            userId={session.user.id}
+            childId={activeChildId}
+            onCheckedIn={() => setShowWellbeing(false)}
+            onDismiss={() => { setShowWellbeing(false); setWellbeingDismissed(true); }}
+          />
+        )}
       </ScrollView>
 
       <EditEventModal
@@ -296,8 +381,11 @@ export default function HomeScreen() {
       />
     </SafeAreaView>
 
-      {!showAssistant && (
-        <AssistantFab onPress={openAssistant} />
+      {!showAssistant && !showVoiceLog && (
+        <>
+          {canWrite && <VoiceFab onPress={() => setShowVoiceLog(true)} />}
+          <AssistantFab onPress={openAssistant} />
+        </>
       )}
 
       {Platform.OS !== 'android' && (
@@ -311,6 +399,22 @@ export default function HomeScreen() {
           onActivityLogged={handleActivityLogged}
         />
       )}
+
+      <VoiceLogSheet
+        visible={showVoiceLog}
+        onClose={() => setShowVoiceLog(false)}
+        childId={activeChildId}
+        childName={activeChild.name}
+        childDob={activeChild.date_of_birth}
+        onActivityLogged={handleActivityLogged}
+      />
+
+      <HandoffSummarySheet
+        visible={showHandoff}
+        onClose={() => setShowHandoff(false)}
+        events={[...todayEvents, ...yesterdayEvents]}
+        childName={activeChild.name}
+      />
 
       <LogConfirmationOverlay />
     </View>
@@ -369,6 +473,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
+  moreActionsToggle: {
+    alignSelf: 'center',
+    borderRadius: Radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  moreActionsLabel: { fontSize: 12, fontWeight: '600' },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+    paddingTop: Spacing.sm,
+  },
+  secondaryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+  },
+  secondaryChipEmoji: { fontSize: 14 },
+  secondaryChipLabel: { fontSize: 13, fontWeight: '600' },
   addChildButton: {
     margin: Spacing.lg,
     borderRadius: 12,
